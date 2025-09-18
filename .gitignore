@@ -1,0 +1,22 @@
+# Ambiente virtual
+.venv/
+
+# Arquivos compilados do Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Planilhas geradas
+*.xlsx
+*.csv
+
+# Arquivo de variáveis de ambiente
+.env
+
+# Arquivos do MacOS
+.DS_Store
+
+# Pastas de upload e saída
+uploads/
+output/

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>Extração de Protocolos (17 dígitos)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { --bg:#0f172a; --card:#111827; --text:#e5e7eb; --muted:#9ca3af; --accent:#22c55e; }
+    body { margin:0; font-family:system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, sans-serif; background:var(--bg); color:var(--text);}
+    .container { max-width:900px; margin:40px auto; padding:0 16px;}
+    .card { background:var(--card); border-radius:16px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,.3);}
+    h1 { margin:0 0 8px; font-weight:700;}
+    p.sub { color:var(--muted); margin-top:0;}
+    .uploader { border:2px dashed #334155; border-radius:12px; padding:20px; text-align:center; }
+    input[type=file] { width:100%; margin:8px 0; }
+    button { background:var(--accent); border:none; color:#052e16; padding:12px 18px; border-radius:10px; font-weight:700; cursor:pointer;}
+    button:disabled { opacity:.6; cursor:not-allowed;}
+    .status { margin-top:16px; color:var(--muted); }
+    table { width:100%; border-collapse:collapse; margin-top:16px; }
+    th, td { padding:10px; border-bottom:1px solid #1f2937; font-size:14px; }
+    th { text-align:left; color:#cbd5e1; }
+    .right { text-align:right; }
+    .link { color:#93c5fd; text-decoration:none; }
+    .grid { display:grid; gap:16px; grid-template-columns:1fr; }
+    @media(min-width:700px){ .grid{ grid-template-columns:2fr 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>Extração de Protocolos (17 dígitos)</h1>
+      <p class="sub">Envie imagens (.jpg, .png, .tif...) para reconhecer o número de protocolo. O Excel é acumulativo.</p>
+      <div class="grid">
+        <div>
+          <div class="uploader">
+            <input id="files" type="file" accept="image/*,.tif,.tiff,.bmp,.webp,.jfif" multiple>
+            <button id="sendBtn">Processar</button>
+            <div class="status" id="status">Pronto.</div>
+          </div>
+          <table id="table" style="display:none">
+            <thead>
+              <tr>
+                <th>Arquivo</th>
+                <th>Protocolo (formatado)</th>
+                <th>17 dígitos</th>
+                <th class="right">Data extração</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div>
+          <div class="card" style="background:#0b1220">
+            <h3 style="margin-top:0">Planilha Excel</h3>
+            <p class="sub">Baixe sempre a versão atualizada (consolidada).</p>
+            <p><a id="excelLink" class="link" href="#" target="_blank" rel="noopener">Baixar Excel</a></p>
+            <p class="sub" id="totais"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const API = "http://127.0.0.1:8000";
+const filesEl = document.getElementById("files");
+const sendBtn = document.getElementById("sendBtn");
+const statusEl = document.getElementById("status");
+const table = document.getElementById("table");
+const tbody = table.querySelector("tbody");
+const excelLink = document.getElementById("excelLink");
+const totals = document.getElementById("totais");
+
+excelLink.href = API + "/download/excel";
+
+sendBtn.onclick = async () => {
+  const files = filesEl.files;
+  if (!files || files.length === 0) {
+    alert("Selecione ao menos uma imagem.");
+    return;
+  }
+  sendBtn.disabled = true;
+  statusEl.textContent = "Enviando e processando...";
+
+  const form = new FormData();
+  for (const f of files) form.append("files", f, f.name);
+
+  try {
+    const res = await fetch(API + "/extract", { method: "POST", body: form });
+    if (!res.ok) throw new Error("Falha no processamento");
+    const data = await res.json();
+
+    // tabela
+    tbody.innerHTML = "";
+    for (const r of data.resultados_lote) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${r.arquivo || ""}</td>
+        <td>${r.protocolo_ocr || ""}</td>
+        <td>${r.protocolo_17_digitos || ""}</td>
+        <td class="right">${r.data_extracao || ""}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+    table.style.display = "table";
+
+    totals.textContent = "Total de protocolos (no Excel): " + data.total_protocolos_no_excel;
+    excelLink.href = API + data.excel_path;
+
+    statusEl.textContent = "Concluído!";
+  } catch (e) {
+    console.error(e);
+    statusEl.textContent = "Erro: " + e.message;
+  } finally {
+    sendBtn.disabled = false;
+  }
+};
+</script>
+</body>
+</html>
