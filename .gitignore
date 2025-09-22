@@ -22,3 +22,4 @@ output/
 # Cache
 *.log
 *.tmp
+.venv312/ 
