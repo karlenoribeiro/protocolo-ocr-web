@@ -1,12 +1,7 @@
 # -*- coding: utf-8 -*-
-"""
-Núcleo de OCR:
-- Pré-processamentos em variações (CLAHE, Otsu, invertido, morfologia)
-- Deskew usando OSD do Tesseract
-- Regex robusta para formatos de protocolo
-- Saída padronizada
-"""
+from __future__ import annotations
 
+import os
 import re
 from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
@@ -17,228 +12,184 @@ import pytesseract
 from unidecode import unidecode
 from zoneinfo import ZoneInfo
 
+
+# -----------------------------------------------------------------------------
+# Fuso para timestamps exibidos/gravados
+# -----------------------------------------------------------------------------
 LOCAL_TZ = ZoneInfo("America/Belem")
 
-# --------------------------------------------------------------------------------------
-# Tempo e helpers
-# --------------------------------------------------------------------------------------
-
-def agora_belem_str() -> str:
-    return datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-
-
-def tesseract_config(digits_only: bool = False) -> str:
-    # psm 6: assumindo um bloco único de texto
-    if digits_only:
-        return "--psm 6 -c tessedit_char_whitelist=0123456789"
-    return "--psm 6"
-
-
-def ocr_text(img_bgr: np.ndarray, config: str) -> str:
-    try:
-        txt = pytesseract.image_to_string(img_bgr, config=config, lang=_langs())
-        # normaliza acentos e espaços
-        return unidecode(txt).replace("\r", " ").replace("\n", " ").strip()
-    except Exception:
-        return ""
+# -----------------------------------------------------------------------------
+# Descoberta do executável do Tesseract (Windows)
+# - respeita variáveis TESSERACT_CMD / TESSERACT_PATH
+# - tenta caminhos comuns
+# -----------------------------------------------------------------------------
+_tess_cmd_env = os.environ.get("TESSERACT_CMD") or os.environ.get("TESSERACT_PATH")
+if _tess_cmd_env and os.path.exists(_tess_cmd_env):
+    pytesseract.pytesseract.tesseract_cmd = _tess_cmd_env  # type: ignore[attr-defined]
+else:
+    _candidatos = [
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+    ]
+    for _p in _candidatos:
+        if os.path.exists(_p):
+            pytesseract.pytesseract.tesseract_cmd = _p  # type: ignore[attr-defined]
+            break
 
 
-def _langs() -> str:
+# -----------------------------------------------------------------------------
+# Regex de protocolos (17 dígitos no total, com tolerância a espaços/hífens)
+# Exemplos aceitos:
+#   00000 000000 / 2024 - 00
+#   00000-000000/2024-00
+#   00000000000202400 (sequência já “colada”)
+# -----------------------------------------------------------------------------
+PROTO_REGEXES = [
+    # sequência de 17 dígitos "colada"
+    re.compile(r"\b(\d{17})\b"),
+
+    # padrão com 5 + 6 + 4 + 2 (com separadores variados)
+    re.compile(
+        r'('
+        r'[0-9]{5}\s*[-–]?\s*[0-9]{5,6}\s*/\s*[0-9]{4}\s*[-–]?\s*[0-9]{2}'
+        r')',
+        re.IGNORECASE
+    ),
+]
+
+
+def _only_digits(s: str) -> str:
+    return re.sub(r"\D+", "", s or "")
+
+
+def extrai_protocolo(texto: str) -> Optional[str]:
     """
-    Usa 'por+eng' se disponível, senão volta para 'eng'.
+    Procura um protocolo que, ao retirar não-dígitos, resulte em exatamente 17 dígitos.
+    Retorna a string de 17 dígitos (somente números) ou None.
     """
-    try:
-        langs = set(pytesseract.get_languages(config=""))
-        if "por" in langs:
-            return "por+eng"
-    except Exception:
-        pass
-    return "eng"
+    if not texto:
+        return None
 
-# --------------------------------------------------------------------------------------
-# Pré-processamento / deskew
-# --------------------------------------------------------------------------------------
+    for rx in PROTO_REGEXES:
+        for m in rx.finditer(texto):
+            grupo = m.group(1)
+            digits = _only_digits(grupo)
+            if len(digits) == 17:
+                return digits
+
+    # fallback: varre qualquer bloco que possa virar 17 dígitos
+    for m in re.finditer(r"[0-9\-\s/]{10,}", texto):
+        digits = _only_digits(m.group(0))
+        if len(digits) == 17:
+            return digits
+
+    return None
+
 
 def deskew_osd(bgr: np.ndarray) -> np.ndarray:
     """
-    Estima rotação via OSD do Tesseract e corrige.
+    Usa OSD do Tesseract para estimar rotação e corrigir (quando possível).
+    Não falha a pipeline se der erro.
     """
     try:
-        osd = pytesseract.image_to_osd(bgr)
-        angle = 0.0
-        for part in osd.split():
-            try:
-                angle = float(part)
-                break
-            except ValueError:
-                continue
+        osd_text = pytesseract.image_to_osd(bgr)
+        # Padrões típicos: "Rotate: 90" ou "Orientation in degrees: 90"
+        m = re.search(
+            r"(?:Rotate|Orientation in degrees)\s*:\s*([+-]?\d+)",
+            osd_text,
+            re.IGNORECASE,
+        )
+        angle = float(m.group(1)) if m else 0.0
         if abs(angle) > 0.01:
             (h, w) = bgr.shape[:2]
             center = (w // 2, h // 2)
             M = cv2.getRotationMatrix2D(center, -angle, 1.0)
-            return cv2.warpAffine(bgr, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+            return cv2.warpAffine(
+                bgr, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE
+            )
     except Exception:
         pass
     return bgr
 
 
-def to_gray(bgr: np.ndarray) -> np.ndarray:
-    return cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-
-
-def clahe(gray: np.ndarray) -> np.ndarray:
-    c = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-    return c.apply(gray)
-
-
-def binarize_otsu(gray: np.ndarray) -> np.ndarray:
-    return cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-
-
-def morph_open(bin_img: np.ndarray, k: int = 3) -> np.ndarray:
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (k, k))
-    return cv2.morphologyEx(bin_img, cv2.MORPH_OPEN, kernel, iterations=1)
-
-
-def tentar_ocr_em_varias_formas(bgr: np.ndarray) -> str:
+def _preprocess_for_ocr(bgr: np.ndarray) -> np.ndarray:
     """
-    Testa variações de pré-processamento para maximizar o OCR.
+    Pré-processamento simples: escala de cinza, normalização, limiarização adaptativa.
+    Mantemos em BGR na entrada para compatibilidade e convertendo internamente.
     """
-    candidates = []
+    if bgr is None or bgr.size == 0:
+        return bgr
 
-    # 0) Original (deskew)
-    img0 = deskew_osd(bgr)
-    candidates.append(img0)
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
 
-    # 1) Gray + CLAHE
-    g1 = clahe(to_gray(img0))
-    candidates.append(cv2.cvtColor(g1, cv2.COLOR_GRAY2BGR))
+    # equalização leve
+    gray = cv2.equalizeHist(gray)
 
-    # 2) Otsu
-    b1 = binarize_otsu(g1)
-    candidates.append(cv2.cvtColor(b1, cv2.COLOR_GRAY2BGR))
-
-    # 3) Invertido
-    b2 = cv2.bitwise_not(b1)
-    candidates.append(cv2.cvtColor(b2, cv2.COLOR_GRAY2BGR))
-
-    # 4) Morfologia
-    b3 = morph_open(b1, 3)
-    candidates.append(cv2.cvtColor(b3, cv2.COLOR_GRAY2BGR))
-
-    # 5) Blur leve
-    g2 = cv2.GaussianBlur(g1, (3, 3), 0)
-    candidates.append(cv2.cvtColor(g2, cv2.COLOR_GRAY2BGR))
-
-    # OCR nas variantes
-    texts = []
-    for c in candidates:
-        t = ocr_text(c, tesseract_config(digits_only=False))
-        if t:
-            texts.append(t)
-
-    # Concatena tudo (evita perder algo que só apareceu em uma variante)
-    return " | ".join(texts)
+    # binarização adaptativa ajuda em variações de iluminação
+    bin_img = cv2.adaptiveThreshold(
+        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 35, 9
+    )
+    # Volta a 3 canais para APIs que esperam BGR/RGB
+    return cv2.cvtColor(bin_img, cv2.COLOR_GRAY2BGR)
 
 
-# --------------------------------------------------------------------------------------
-# Extração de protocolo
-# --------------------------------------------------------------------------------------
-
-# Aceita:
-# 23073-009780/2013-20
-# 23073009780/2013-20 (com / e - opcionais, espaços)
-PROTO_REGEXES = [
-    re.compile(
-        r'PROTOCOLO[:\s-]*('
-        r'[0-9]{5}\s*[-–]?\s*[0-9]{5,6}\s*/\s*[0-9]{4}\s*[-–]?\s*[0-9]{2}'
-        r')',
-        re.IGNORECASE
-    ),
-    re.compile(
-        r'('
-        r'[0-9]{5}\s*[-–]?\s*[0-9]{5,6}\s*/\s*[0-9]{4}\s*[-–]?\s*[0-9]{2}'
-        r')'
-    ),
-]
-
-
-def extrair_protocolo_de_texto(texto: str) -> Tuple[Optional[str], Optional[str]]:
+def _ocr_text(bgr: np.ndarray) -> str:
     """
-    Procura um protocolo "formatado" e devolve também a versão só com 17 dígitos.
-    Retorna (protocolo_formatado, protocolo_17_digitos).
+    OCR com Tesseract (por + eng). Ajuste o PSM conforme o layout típico.
     """
-    if not texto:
-        return (None, None)
+    config = "--psm 6"  # linhas/blocks com algum layout
+    try:
+        txt = pytesseract.image_to_string(bgr, lang="por+eng", config=config)
+    except pytesseract.TesseractNotFoundError as e:
+        raise RuntimeError(
+            "Tesseract não encontrado. Instale-o e/ou defina TESSERACT_CMD com o caminho do executável."
+        ) from e
+    return txt or ""
 
-    for rx in PROTO_REGEXES:
-        m = rx.search(texto)
-        if m:
-            fmt = m.group(1)
-            # remove tudo que não é dígito
-            digits = "".join(ch for ch in fmt if ch.isdigit())
-            if len(digits) == 17:
-                return (fmt.strip(), digits)
 
-    # fallback: às vezes o OCR junta tudo em um bloco de 17 dígitos
-    m2 = re.search(r'(\d{17})', texto)
-    if m2:
-        dg = m2.group(1)
-        return (dg, dg)
-
-    return (None, None)
-
-# --------------------------------------------------------------------------------------
-# ROI (opcional)
-# --------------------------------------------------------------------------------------
-
-def find_protocolo_roi(bgr: np.ndarray) -> Optional[Tuple[int, int, int, int]]:
+def processar_imagem_bytes(img_bytes: bytes, nome_arquivo: str = "") -> Dict[str, Any]:
     """
-    Heurística simples (placeholder): retorna None para usar a imagem toda.
-    Se quiser restringir a área (ex.: cabeçalho), implemente aqui.
+    Pipeline completa para 1 imagem:
+      - decodifica
+      - deskew (OSD)
+      - pré-processa
+      - OCR
+      - extrai protocolo
+    Retorna um dicionário serializável.
     """
-    return None
+    try:
+        nparr = np.frombuffer(img_bytes, np.uint8)
+        bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if bgr is None:
+            return {
+                "ok": False,
+                "arquivo": nome_arquivo,
+                "erro": "Falha ao decodificar a imagem (formato não suportado?).",
+            }
 
+        # Deskew (tenta, mas não é obrigatório)
+        bgr = deskew_osd(bgr)
 
-# --------------------------------------------------------------------------------------
-# Função pública usada pelo backend
-# --------------------------------------------------------------------------------------
+        # Pré-processamento e OCR
+        prep = _preprocess_for_ocr(bgr)
+        texto = _ocr_text(prep)
 
-def processar_imagem_bytes(filename: str, content: bytes) -> Dict[str, Any]:
-    arr = np.frombuffer(content, dtype=np.uint8)
-    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-    if img is None:
+        # Normalizações auxiliares para busca
+        texto_clean = unidecode(texto).upper()
+
+        protocolo = extrai_protocolo(texto_clean)
+
         return {
-            "arquivo": filename,
-            "protocolo_ocr": None,
-            "protocolo_17_digitos": None,
-            "data_extracao": agora_belem_str(),
-            "ok": False,
+            "ok": True,
+            "arquivo": nome_arquivo,
+            "texto_ocr": texto,
+            "texto_ocr_clean": texto_clean,
+            "protocolo_17_digitos": protocolo,
+            "warnings": [] if protocolo else ["protocolo_nao_detectado"],
         }
+    except Exception as e:
+        return {"ok": False, "arquivo": nome_arquivo, "erro": str(e)}
 
-    textos = ""
-    roi = find_protocolo_roi(img)
-    if roi:
-        x1, y1, x2, y2 = roi
-        recorte = img[y1:y2, x1:x2]
-        textos = tentar_ocr_em_varias_formas(recorte)
 
-    if not textos.strip():
-        textos = tentar_ocr_em_varias_formas(img)
-
-    protocolo_fmt, protocolo_17 = extrair_protocolo_de_texto(textos)
-
-    # Tentativa extra, caso não tenha achado
-    if not protocolo_17:
-        texto_extra = ocr_text(img, tesseract_config(digits_only=False))
-        if texto_extra:
-            protocolo_fmt, protocolo_17 = extrair_protocolo_de_texto(texto_extra)
-
-    ok = bool(protocolo_17)
-    return {
-        "arquivo": filename,
-        "protocolo_ocr": protocolo_fmt,
-        "protocolo_17_digitos": protocolo_17,
-        "data_extracao": agora_belem_str(),
-        "ok": ok,
-    }
+def agora_belem_str(fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
+    return datetime.now(LOCAL_TZ).strftime(fmt)
