@@ -1,196 +1,219 @@
-# ============================================================
-# main_web.py — API FastAPI para OCR de protocolos (17 dígitos)
-# - Deduplicação: no lote e contra o Excel existente
-# - Gravação como TEXTO no Excel (evita notação científica)
-# - Endpoint de download do Excel
-# ============================================================
+# -*- coding: utf-8 -*-
+"""
+API de OCR de protocolo com:
+- Deduplicação intra-lote e contra Excel
+- Relatório do processamento
+- Endpoint para baixar a planilha
+"""
 
-from __future__ import annotations
-
+import io
 import time
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 import pandas as pd
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
-from openpyxl import load_workbook  # opcional (mantido se desejar evoluções)
-from datetime import datetime
-from zoneinfo import ZoneInfo
+from fastapi.responses import FileResponse, JSONResponse
+from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
 
-# Importa do seu módulo de OCR
-from .ocr_core import processar_imagem_bytes, EXCEL_PATH
+from .ocr_core import processar_imagem_bytes, agora_belem_str
 
+APP_VERSION = "1.3.0"
 
-# -------------------------
-# Configurações gerais
-# -------------------------
-APP_TITLE = "Protocolo OCR Web"
-APP_VERSION = "1.2"
-LOCAL_TZ = ZoneInfo("America/Belem")
+# Diretórios / arquivos
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "data"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+EXCEL_PATH = DATA_DIR / "protocolos_extraidos.xlsx"
 
+# Colunas-padrão da planilha
 COLS = ["arquivo", "protocolo_ocr", "protocolo_17_digitos", "data_extracao"]
 
+# --------------------------------------------------------------------------------------
+# Utilidades
+# --------------------------------------------------------------------------------------
 
-def agora_belem_str() -> str:
-    return datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-
-
-# -------------------------
-# Normalização e salvamento
-# -------------------------
-def _normaliza_proto_17(s: Any) -> str:
-    """Mantém apenas dígitos e aceita somente strings com exatamente 17 dígitos."""
-    if pd.isna(s):
+def _normaliza_proto_17(v: Any) -> str:
+    """
+    - Garante string
+    - Mantém somente dígitos
+    - Retorna '' se não tiver exatamente 17 dígitos
+    """
+    if v is None:
         return ""
-    s = "".join(ch for ch in str(s) if ch.isdigit())
-    return s if len(s) == 17 else ""
+    s = str(v)
+    dig = "".join(ch for ch in s if ch.isdigit())
+    return dig if len(dig) == 17 else ""
 
 
-def salvar_excel_sem_duplicar(caminho_xlsx: str | Path, df_lote: pd.DataFrame) -> Dict[str, Any]:
-    """
-    Regras:
-    - Garante colunas padrão e que 'protocolo_17_digitos' esteja normalizado (apenas 17 dígitos, texto).
-    - Remove duplicados DENTRO do lote por 'protocolo_17_digitos'.
-    - Compara com o Excel (se existir) e só ANEXA protocolos realmente novos.
-    - Grava coluna como TEXTO no Excel (number_format "@").
-
-    Retorna estatísticas e listas úteis para o front.
-    """
-    caminho_xlsx = Path(caminho_xlsx)
-    caminho_xlsx.parent.mkdir(parents=True, exist_ok=True)
-
-    # --- Normaliza e garante colunas ---
-    df = df_lote.copy()
+def _carrega_excel(path: Path) -> pd.DataFrame:
+    """Carrega o Excel se existir, garantindo colunas e dtype=str."""
+    if path.exists():
+        try:
+            df = pd.read_excel(path, dtype=str, engine="openpyxl")
+        except Exception:
+            # Arquivo pode estar corrompido; tenta recuperar mínimo
+            df = pd.DataFrame(columns=COLS)
+    else:
+        df = pd.DataFrame(columns=COLS)
+    # Garante colunas na ordem
     for c in COLS:
         if c not in df.columns:
             df[c] = ""
-    df = df[COLS].astype(str)
+    return df[COLS].astype(str)
 
-    # Normaliza protocolo 17 dígitos
-    df["protocolo_17_digitos"] = df["protocolo_17_digitos"].map(_normaliza_proto_17)
-    # Remove linhas inválidas (sem 17 dígitos)
-    df = df[df["protocolo_17_digitos"] != ""].reset_index(drop=True)
 
-    total_lote = len(df)
+def _salva_excel_texto(path: Path, df: pd.DataFrame) -> None:
+    """
+    Salva DataFrame no Excel garantindo a coluna 'protocolo_17_digitos' como TEXTO.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
 
-    # --- Dedup DENTRO do lote ---
-    df_lote_unico = df.drop_duplicates(subset=["protocolo_17_digitos"], keep="first").reset_index(drop=True)
-    duplicados_no_lote = total_lote - len(df_lote_unico)
+    # Escreve com openpyxl e depois ajusta o number_format da coluna
+    with pd.ExcelWriter(path, engine="openpyxl", mode="w") as writer:
+        df.to_excel(writer, index=False, sheet_name="dados")
+        ws = writer.book["dados"]
+        # Descobre índice da coluna 'protocolo_17_digitos'
+        try:
+            col_idx = df.columns.get_loc("protocolo_17_digitos") + 1  # 1-based
+            col_letter = get_column_letter(col_idx)
+            for cell in ws[f"{col_letter}:{col_letter}"]:
+                cell.number_format = "@"
+        except Exception:
+            pass
 
-    # Guarda lista dos duplicados do lote (para UI)
-    seen = set()
-    lista_duplicados_lote: List[str] = []
-    for proto in df["protocolo_17_digitos"].tolist():
-        if proto in seen and proto not in lista_duplicados_lote:
-            lista_duplicados_lote.append(proto)
-        seen.add(proto)
 
-    # --- Lê Excel existente (se houver) ---
-    if caminho_xlsx.exists():
-        df_exist = pd.read_excel(caminho_xlsx, dtype=str, engine="openpyxl")
-        for c in COLS:
-            if c not in df_exist.columns:
-                df_exist[c] = ""
-        df_exist = df_exist[COLS].astype(str)
-        df_exist["protocolo_17_digitos"] = df_exist["protocolo_17_digitos"].map(_normaliza_proto_17)
-        df_exist = df_exist[df_exist["protocolo_17_digitos"] != ""].reset_index(drop=True)
+def salvar_excel_sem_duplicar(path: Path, df_lote: pd.DataFrame) -> Dict[str, Any]:
+    """
+    Consolida os resultados do lote no Excel, impedindo duplicados.
+
+    - Remove duplicados intra-lote (mesmo protocolo repetido nas imagens enviadas agora)
+    - Não reinsere protocolos que já existem no Excel
+    - Retorna estatísticas e listas para exibição na UI
+    """
+    # Normaliza a coluna de protocolo do lote
+    df_lote = df_lote.copy()
+    if not len(df_lote):
+        # Nada a salvar
+        return {
+            "duplicados_no_lote": 0,
+            "ja_salvos": 0,
+            "inseridos": 0,
+            "lista_duplicados_lote": [],
+            "lista_ja_salvos": [],
+            "lista_inseridos": [],
+        }
+
+    df_lote["protocolo_17_digitos"] = df_lote["protocolo_17_digitos"].map(_normaliza_proto_17)
+    df_lote["data_extracao"] = df_lote["data_extracao"].fillna(agora_belem_str())
+
+    # Filtra válidos (17 dígitos)
+    df_validos = df_lote[df_lote["protocolo_17_digitos"].str.len() == 17].copy()
+
+    # Deduplicação intra-lote
+    antes = len(df_validos)
+    # Mantém a PRIMEIRA ocorrência; duplicados do mesmo lote são reportados
+    df_validos = df_validos.drop_duplicates(subset=["protocolo_17_digitos"], keep="first")
+    dup_intra_count = antes - len(df_validos)
+    # Quais foram duplicados no lote:
+    contagens_lote = (
+        df_lote[df_lote["protocolo_17_digitos"].str.len() == 17]["protocolo_17_digitos"]
+        .value_counts()
+    )
+    lista_duplicados_lote = sorted([p for p, n in contagens_lote.items() if n > 1])
+
+    # Carrega o Excel existente
+    df_excel = _carrega_excel(path)
+
+    # Conjunto já salvo
+    ja_no_excel = set(df_excel["protocolo_17_digitos"].map(_normaliza_proto_17))
+
+    # Novos a inserir = válidos do lote que ainda não estão no Excel
+    mask_novos = ~df_validos["protocolo_17_digitos"].isin(ja_no_excel)
+    df_novos = df_validos[mask_novos].copy()
+    df_repetidos_excel = df_validos[~mask_novos].copy()
+
+    # Listas para a UI
+    lista_inseridos = sorted(df_novos["protocolo_17_digitos"].unique().tolist())
+    lista_ja_salvos = sorted(df_repetidos_excel["protocolo_17_digitos"].unique().tolist())
+
+    # Concatena e salva
+    if len(df_novos):
+        df_out = pd.concat([df_excel, df_novos[COLS]], ignore_index=True)
     else:
-        df_exist = pd.DataFrame(columns=COLS)
+        df_out = df_excel
 
-    set_exist = set(df_exist["protocolo_17_digitos"].unique().tolist())
-    set_lote_unico = set(df_lote_unico["protocolo_17_digitos"].unique().tolist())
-
-    # Protocolos que JÁ existiam no Excel
-    lista_ja_salvos = sorted(list(set_lote_unico & set_exist))
-    # Protocolos realmente NOVOS (não existiam no Excel)
-    mask_novos = ~df_lote_unico["protocolo_17_digitos"].isin(set_exist)
-    df_novos = df_lote_unico[mask_novos].reset_index(drop=True)
-    lista_inseridos = df_novos["protocolo_17_digitos"].unique().tolist()
-
-    qtd_ja_salvos = len(lista_ja_salvos)
-    inseridos = len(lista_inseridos)
-
-    # --- Concatena e grava ---
-    df_final = pd.concat([df_exist, df_novos], ignore_index=True)
-
-    with pd.ExcelWriter(caminho_xlsx, engine="openpyxl", mode="w") as writer:
-        df_final.to_excel(writer, index=False, sheet_name="Sheet1")
-        ws = writer.book["Sheet1"]
-        # Força a coluna como TEXTO
-        col_idx = list(df_final.columns).index("protocolo_17_digitos") + 1
-        for r in range(2, ws.max_row + 1):  # ignora cabeçalho
-            ws.cell(row=r, column=col_idx).number_format = "@"
+    _salva_excel_texto(path, df_out)
 
     return {
-        "total_lote": total_lote,
-        "duplicados_no_lote": duplicados_no_lote,
+        "duplicados_no_lote": dup_intra_count,
+        "ja_salvos": len(lista_ja_salvos),
+        "inseridos": len(lista_inseridos),
         "lista_duplicados_lote": lista_duplicados_lote,
-        "ja_salvos": qtd_ja_salvos,
         "lista_ja_salvos": lista_ja_salvos,
-        "inseridos": inseridos,
         "lista_inseridos": lista_inseridos,
-        "total_final": len(df_final),
     }
 
+# --------------------------------------------------------------------------------------
+# FastAPI
+# --------------------------------------------------------------------------------------
 
-# -------------------------
-# App FastAPI
-# -------------------------
-app = FastAPI(title=APP_TITLE, version=APP_VERSION)
+app = FastAPI(title="Protocolo OCR API", version=APP_VERSION)
 
-# CORS — ajuste conforme necessidade (se não usa cookies/autenticação, deixe allow_credentials=False)
+# CORS (em produção, restrinja para seu domínio)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          # em produção, prefira domínios específicos
-    allow_credentials=False,      # True exige allow_origins explícito (não "*")
+    allow_origins=["*"],  # troque por ["https://seu-dominio.com"]
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-@app.get("/", response_class=HTMLResponse)
-def root() -> str:
-    return "<h1>API Protocolo OCR</h1><p>Use POST /extract</p>"
+@app.get("/ping")
+def ping():
+    return {"ok": True, "version": APP_VERSION, "now": agora_belem_str()}
 
 
 @app.post("/extract")
 async def extract(files: List[UploadFile] = File(...)) -> JSONResponse:
     """
-    Recebe imagens, processa OCR e grava Excel sem duplicar protocolos.
-    Responde com resumo do lote e caminhos úteis.
+    Recebe imagens, aplica OCR, extrai protocolo, consolida Excel sem duplicar e
+    retorna:
+      - resumo (totais do lote)
+      - total_protocolos_no_excel (acumulado)
+      - listas: duplicados_lote, duplicados (no Excel), inseridos
+      - resultados_lote (por arquivo)
     """
     t0 = time.time()
     resultados: List[Dict[str, Any]] = []
     encontrados = 0
 
-    # Processa cada arquivo enviado
     for i, f in enumerate(files, start=1):
         content = await f.read()
-        r = processar_imagem_bytes(f.filename, content)  # deve retornar dict com chaves esperadas
+        r = processar_imagem_bytes(f.filename, content)
         r["indice_processamento"] = i
-        # Garante data_extracao, se o OCR não colocar
         if not r.get("data_extracao"):
             r["data_extracao"] = agora_belem_str()
+        # normaliza p17
+        p17 = _normaliza_proto_17(r.get("protocolo_17_digitos"))
+        r["protocolo_17_digitos"] = p17
+        if p17:
+            encontrados += 1
         resultados.append(r)
-        if r.get("protocolo_17_digitos"):
-            # conta apenas se tem 17 dígitos válidos após normalização
-            if _normaliza_proto_17(r.get("protocolo_17_digitos")):
-                encontrados += 1
 
-    # Monta DataFrame do lote
+    # DataFrame do lote (com as colunas padronizadas)
     df_lote = pd.DataFrame([{
         "arquivo": r.get("arquivo", r.get("filename", "")) or "",
-        "protocolo_ocr": r.get("protocolo_ocr", ""),
-        "protocolo_17_digitos": r.get("protocolo_17_digitos", ""),
+        "protocolo_ocr": r.get("protocolo_ocr", "") or "",
+        "protocolo_17_digitos": r.get("protocolo_17_digitos", "") or "",
         "data_extracao": r.get("data_extracao", agora_belem_str()),
-    } for r in resultados])
+    } for r in resultados], columns=COLS)
 
-    # Deduplicação real + gravação
     stats = salvar_excel_sem_duplicar(EXCEL_PATH, df_lote)
 
-    # Lê Excel final e calcula total de protocolos válidos (17 dígitos)
+    # Total acumulado válido (17 dígitos) no Excel
     total_ok_excel = 0
     try:
         df_total = pd.read_excel(EXCEL_PATH, dtype=str, engine="openpyxl")
@@ -202,7 +225,7 @@ async def extract(files: List[UploadFile] = File(...)) -> JSONResponse:
                 .sum()
             )
     except Exception:
-        df_total = pd.DataFrame(columns=COLS)
+        pass
 
     resumo = {
         "total_docs": len(resultados),
@@ -215,7 +238,6 @@ async def extract(files: List[UploadFile] = File(...)) -> JSONResponse:
         "tempo_total_s": round(time.time() - t0, 3),
     }
 
-    # Compat: mantém chaves usadas no front anterior
     return JSONResponse({
         "resumo": resumo,
         "processados": len(resultados),
@@ -223,24 +245,17 @@ async def extract(files: List[UploadFile] = File(...)) -> JSONResponse:
         "excel_path": "/download/excel",
         "resultados_lote": resultados,
         "duplicados_lote": stats["lista_duplicados_lote"],
-        "duplicados": stats["lista_ja_salvos"],   # já existiam no Excel
-        "inseridos": stats["lista_inseridos"],    # novos inseridos agora
+        "duplicados": stats["lista_ja_salvos"],
+        "inseridos": stats["lista_inseridos"],
     })
 
 
 @app.get("/download/excel")
 def download_excel():
-    excel = Path(EXCEL_PATH)
-    if not excel.exists():
-        return JSONResponse({"erro": "Excel ainda não existe"}, status_code=404)
-    return FileResponse(
-        excel,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        filename=excel.name,
-    )
-
-
-# Execução local:  uvicorn app.main_web:app --host 0.0.0.0 --port 8000 --reload
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("app.main_web:app", host="0.0.0.0", port=8000, reload=True)
+    """
+    Baixa a planilha consolidada. Se ainda não existir, devolve planilha vazia.
+    """
+    if not EXCEL_PATH.exists():
+        df = pd.DataFrame(columns=COLS)
+        _salva_excel_texto(EXCEL_PATH, df)
+    return FileResponse(EXCEL_PATH, filename=EXCEL_PATH.name, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
