@@ -1,4 +1,13 @@
-import re, cv2, numpy as np, pandas as pd, pytesseract
+# =======================
+# EXTRAÇÃO DE PROTOCOLOS (17 DÍGITOS) DE IMAGENS
+# Mantém sua lógica; apenas acrescenta campo "ok" no resultado por arquivo
+# =======================
+
+import re
+import cv2
+import numpy as np
+import pandas as pd
+import pytesseract
 from unidecode import unidecode
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -31,7 +40,8 @@ def rotate_bound(image, angle):
     center = (w // 2, h // 2)
     M = cv2.getRotationMatrix2D(center, -angle, 1.0)
     cos = np.abs(M[0, 0]); sin = np.abs(M[1, 0])
-    nW = int((h * sin) + (w * cos)); nH = int((h * cos) + (w * sin))
+    nW = int((h * sin) + (w * cos))
+    nH = int((h * cos) + (w * sin))
     M[0, 2] += (nW / 2) - center[0]
     M[1, 2] += (nH / 2) - center[1]
     return cv2.warpAffine(image, M, (nW, nH), flags=cv2.INTER_LINEAR)
@@ -134,60 +144,149 @@ def processar_imagem_bytes(filename: str, content: bytes):
     arr = np.frombuffer(content, dtype=np.uint8)
     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     if img is None:
-        return {"arquivo": filename, "protocolo_ocr": None,
-                "protocolo_17_digitos": None, "data_extracao": now_belem_str()}
+        return {
+            "arquivo": filename,
+            "protocolo_ocr": None,
+            "protocolo_17_digitos": None,
+            "data_extracao": now_belem_str(),
+            "ok": False
+        }
+
     roi = find_protocolo_roi(img)
     textos = ""
     if roi:
         x1,y1,x2,y2 = roi
         recorte = img[y1:y2, x1:x2]
         textos = tentar_ocr_em_varias_formas(recorte)
+
     if not textos.strip():
         textos = tentar_ocr_em_varias_formas(img)
+
     protocolo_fmt, protocolo_17 = extrair_protocolo_de_texto(textos)
+
     if not protocolo_17:
         try:
             texto_extra = ocr_text(img, tesseract_config(digits_only=False))
             protocolo_fmt, protocolo_17 = extrair_protocolo_de_texto(texto_extra)
         except Exception:
             pass
-    return {"arquivo": filename, "protocolo_ocr": protocolo_fmt,
-            "protocolo_17_digitos": protocolo_17, "data_extracao": now_belem_str()}
+
+    ok = bool(protocolo_17)
+    return {
+        "arquivo": filename,
+        "protocolo_ocr": protocolo_fmt,
+        "protocolo_17_digitos": protocolo_17,
+        "data_extracao": now_belem_str(),
+        "ok": ok
+    }
 
 EXCEL_PATH = Path(__file__).parent / "data" / "protocolos_extraidos.xlsx"
 EXCEL_PATH.parent.mkdir(parents=True, exist_ok=True)
 
+# --- NOVO: carrega protocolos existentes como set ---
+def _carregar_set_existentes() -> set:
+    """Carrega 'protocolo_17_digitos' já existentes no Excel como set de strings."""
+    existentes = set()
+    if EXCEL_PATH.exists():
+        try:
+            df_exist = pd.read_excel(EXCEL_PATH, dtype={"protocolo_17_digitos": str})
+            if "protocolo_17_digitos" in df_exist.columns:
+                for v in df_exist["protocolo_17_digitos"].astype(str).fillna(""):
+                    v = "".join(ch for ch in v if ch.isdigit())
+                    if len(v) == 17:
+                        existentes.add(v)
+        except Exception:
+            pass  # se der erro, considera vazio
+    return existentes
+
+
 def salvar_excel_texto(df_total: pd.DataFrame):
-    # garante coluna como texto
     if "protocolo_17_digitos" in df_total.columns:
         df_total["protocolo_17_digitos"] = df_total["protocolo_17_digitos"].fillna("").astype(str)
     else:
         df_total["protocolo_17_digitos"] = ""
-
     with pd.ExcelWriter(EXCEL_PATH, engine="openpyxl", mode="w") as writer:
         df_total.to_excel(writer, index=False, sheet_name="Sheet1")
         ws = writer.book.active
         col_idx = None
         for idx, cell in enumerate(ws[1], start=1):
             if str(cell.value) == "protocolo_17_digitos":
-                col_idx = idx; break
+                col_idx = idx
+                break
         if col_idx is not None:
             for row in ws.iter_rows(min_row=2, min_col=col_idx, max_col=col_idx):
                 for cell in row:
                     cell.number_format = "@"
 
-def consolidar_resultados(novos: List[dict]) -> pd.DataFrame:
-    df_novos = pd.DataFrame(novos, columns=["arquivo","protocolo_ocr","protocolo_17_digitos","data_extracao"])
+# --- NOVO: agora retorna (df_total, duplicados, inseridos) ---
+from typing import Dict, Tuple  # certifique-se de ter esse import no topo
+
+def consolidar_resultados(novos: List[dict]) -> Tuple[pd.DataFrame, List[Dict], List[Dict]]:
+    """
+    Consolida no Excel, ignorando protocolos já existentes.
+    Retorna:
+      - df_total (DataFrame final gravado no Excel)
+      - duplicados (lista de dicts com 'arquivo' e 'protocolo_17_digitos' ignorados)
+      - inseridos (lista de dicts efetivamente inseridos)
+    """
+    colunas = ["arquivo","protocolo_ocr","protocolo_17_digitos","data_extracao"]
+
+    df_novos_full = pd.DataFrame(novos)
+    df_novos = df_novos_full.reindex(columns=colunas)
+
+    # carrega planilha existente (se houver)
     if EXCEL_PATH.exists():
         try:
             df_existente = pd.read_excel(EXCEL_PATH, dtype={"protocolo_17_digitos": str})
         except Exception:
-            df_existente = pd.DataFrame(columns=df_novos.columns)
+            df_existente = pd.DataFrame(columns=colunas)
     else:
-        df_existente = pd.DataFrame(columns=df_novos.columns)
-    df_total = pd.concat([df_existente, df_novos], ignore_index=True)
+        df_existente = pd.DataFrame(columns=colunas)
+
+    # set de protocolos já presentes no Excel
+    set_existentes = _carregar_set_existentes()
+
+    def only_digits_17(x: str) -> str | None:
+        if not isinstance(x, str):
+            return None
+        d = "".join(ch for ch in x if ch.isdigit())
+        return d if len(d) == 17 else None
+
+    duplicados: List[Dict] = []
+    inserir_rows: List[Dict] = []
+
+    for _, row in df_novos.iterrows():
+        proto_raw = row.get("protocolo_17_digitos", "")
+        proto_17 = only_digits_17(str(proto_raw)) if proto_raw else None
+
+        if proto_17:
+            if proto_17 in set_existentes:
+                # já existe -> ignora e reporta como duplicado
+                duplicados.append({
+                    "arquivo": row.get("arquivo", ""),
+                    "protocolo_17_digitos": proto_17
+                })
+            else:
+                # não existe -> será inserido
+                inserir_rows.append({
+                    "arquivo": row.get("arquivo", ""),
+                    "protocolo_ocr": row.get("protocolo_ocr", ""),
+                    "protocolo_17_digitos": proto_17,
+                    "data_extracao": row.get("data_extracao", "")
+                })
+                set_existentes.add(proto_17)
+        else:
+            # sem 17 dígitos válidos -> não entra
+            pass
+
+    df_inserir = pd.DataFrame(inserir_rows, columns=colunas)
+    df_total = pd.concat([df_existente, df_inserir], ignore_index=True)
+
+    # salvaguarda para evitar duplicatas residuais por segurança
     if "protocolo_17_digitos" in df_total.columns:
         df_total["protocolo_17_digitos"] = df_total["protocolo_17_digitos"].astype(str)
-    df_total = df_total.drop_duplicates(subset=["protocolo_17_digitos","arquivo"], keep="first")
+        df_total = df_total.drop_duplicates(subset=["protocolo_17_digitos"], keep="first")
+
     salvar_excel_texto(df_total)
-    return df_total
+    return df_total, duplicados, inserir_rows
+
