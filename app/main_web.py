@@ -5,7 +5,6 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pathlib import Path
 from typing import List
 import uvicorn
 import time
@@ -16,7 +15,7 @@ app = FastAPI(title="Protocolo OCR Web", version="1.1")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # ajuste em produção
+    allow_origins=["*"],  # ajuste em produção para domínios específicos
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -32,51 +31,50 @@ async def extract(files: List[UploadFile] = File(...)):
     resultados = []
     encontrados = 0
 
-    # processa e numera (indice_processamento) cada documento
+    # Processa cada arquivo enviado
     for i, f in enumerate(files, start=1):
         content = await f.read()
         r = processar_imagem_bytes(f.filename, content)
-        r["indice_processamento"] = i
+        r["indice_processamento"] = i  # útil para auditoria no front
         resultados.append(r)
         if r.get("protocolo_17_digitos"):
             encontrados += 1
 
-    # === AQUI É O TRECHO QUE MUDA ===
-    # consolida no Excel, agora ignorando duplicados
-    df_total, duplicados, inseridos = consolidar_resultados(resultados)
+    # Consolidação (dedupe no lote + dedupe contra Excel)
+    df_total, duplicados_excel, inseridos, duplicados_lote = consolidar_resultados(resultados)
 
-    # calcula o total de protocolos válidos (17 dígitos) no Excel
+    # Total de protocolos válidos (17 dígitos) presentes no Excel após a consolidação
     total_ok_excel = 0
     if "protocolo_17_digitos" in df_total.columns:
         total_ok_excel = int(
-            df_total['protocolo_17_digitos']
+            df_total["protocolo_17_digitos"]
             .astype(str)
             .apply(lambda s: s.isdigit() and len(s) == 17)
             .sum()
         )
 
-    # resumo das operações
+    # Resumo das operações do lote
     resumo = {
         "total_docs": len(resultados),
         "processados": len(resultados),
         "encontrados": encontrados,
         "nao_encontrados": len(resultados) - encontrados,
-        "duplicados_no_excel": len(duplicados),   # NOVO
-        "inseridos_no_excel": len(inseridos),     # NOVO
-        "tempo_total_s": round(time.time() - t0, 3)
+        "duplicados_no_lote": len(duplicados_lote),
+        "duplicados_no_excel": len(duplicados_excel),
+        "inseridos_no_excel": len(inseridos),
+        "tempo_total_s": round(time.time() - t0, 3),
     }
 
-    # resposta para o frontend
     return JSONResponse({
         "resumo": resumo,
         "processados": len(resultados),
         "total_protocolos_no_excel": total_ok_excel,
         "excel_path": "/download/excel",
         "resultados_lote": resultados,
-        "duplicados": duplicados,   # NOVO: lista {arquivo, protocolo_17_digitos}
-        "inseridos": inseridos      # NOVO: lista do que entrou
+        "duplicados_lote": duplicados_lote,
+        "duplicados": duplicados_excel,   # mantém a chave antiga para compatibilidade
+        "inseridos": inseridos
     })
-
 
 @app.get("/download/excel")
 def download_excel():
