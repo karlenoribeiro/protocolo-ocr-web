@@ -314,58 +314,52 @@ def _carregar_set_existentes() -> set[str]:
 
 def consolidar_resultados(novos: List[dict]) -> Tuple[pd.DataFrame, List[Dict], List[Dict], List[Dict]]:
     """
-    [LEGADO] Consolida no Excel:
-      (A) Deduplica DENTRO do lote -> 'duplicados_lote'
-      (B) Compara com Excel -> 'duplicados_excel'
-      (C) Salva df_total (drop_duplicates por segurança)
-
+    [CORRIGIDO] Consolida no Excel, removendo duplicatas de forma mais robusta.
     Retorna: (df_total, duplicados_excel, inseridos, duplicados_lote)
     """
     colunas = ["arquivo", "protocolo_ocr", "protocolo_17_digitos", "data_extracao"]
     df_novos_full = pd.DataFrame(novos)
-    df_novos = df_novos_full.reindex(columns=colunas)
 
-    # Excel existente
-    if EXCEL_PATH.exists():
-        try:
-            df_existente = pd.read_excel(EXCEL_PATH, dtype=str, engine="openpyxl")
-        except Exception:
-            df_existente = pd.DataFrame(columns=colunas)
-    else:
-        df_existente = pd.DataFrame(columns=colunas)
-
+    # 1. Carrega protocolos existentes e os novos para conjuntos (sets)
     set_existentes = _carregar_set_existentes()
-
-    # (A) Dedup intra-lote
-    vistos: set[str] = set()
+    
+    # Prepara os dados novos, filtrando e formatando
+    inserir_rows: List[Dict] = []
+    vistos_lote: set[str] = set()
     duplicados_lote: List[Dict] = []
-    candidatos: List[Dict] = []
-
-    for _, row in df_novos.iterrows():
+    
+    for _, row in df_novos_full.iterrows():
         proto_raw = row.get("protocolo_17_digitos", "")
         proto_17 = _only_digits_17(proto_raw)
+        
+        # Ignora protocolos inválidos ou nulos
         if not proto_17:
             continue
-
-        if proto_17 in vistos:
+            
+        # Verifica duplicatas dentro do lote
+        if proto_17 in vistos_lote:
             duplicados_lote.append({
                 "arquivo": row.get("arquivo", ""),
                 "protocolo_17_digitos": proto_17
             })
             continue
 
-        vistos.add(proto_17)
-        candidatos.append({
+        vistos_lote.add(proto_17)
+        
+        # Adiciona à lista de inserção se não for duplicado no lote
+        item = {
             "arquivo": row.get("arquivo", ""),
             "protocolo_ocr": row.get("protocolo_ocr", ""),
             "protocolo_17_digitos": proto_17,
             "data_extracao": row.get("data_extracao", now_belem_str())
-        })
+        }
+        inserir_rows.append(item)
 
-    # (B) Comparação com Excel
+    # 2. Compara com os protocolos existentes no Excel
+    inserir_unicos: List[Dict] = []
     duplicados_excel: List[Dict] = []
-    inserir_rows: List[Dict] = []
-    for item in candidatos:
+    
+    for item in inserir_rows:
         p17 = item["protocolo_17_digitos"]
         if p17 in set_existentes:
             duplicados_excel.append({
@@ -373,15 +367,15 @@ def consolidar_resultados(novos: List[dict]) -> Tuple[pd.DataFrame, List[Dict], 
                 "protocolo_17_digitos": p17
             })
         else:
-            inserir_rows.append(item)
+            inserir_unicos.append(item)
             set_existentes.add(p17)
 
-    # (C) Concatena e salva
-    df_inserir = pd.DataFrame(inserir_rows, columns=colunas)
+    # 3. Concatena e salva
+    df_existente = pd.read_excel(EXCEL_PATH, dtype=str, engine="openpyxl") if EXCEL_PATH.exists() else pd.DataFrame(columns=colunas)
+    df_inserir = pd.DataFrame(inserir_unicos, columns=colunas)
     df_total = pd.concat([df_existente, df_inserir], ignore_index=True)
-    if "protocolo_17_digitos" in df_total.columns:
-        df_total["protocolo_17_digitos"] = df_total["protocolo_17_digitos"].astype(str)
-        df_total = df_total.drop_duplicates(subset=["protocolo_17_digitos"], keep="first")
 
     salvar_excel_texto(df_total)
-    return df_total, duplicados_excel, inserir_rows, duplicados_lote
+    
+    # 4. Retorna os resultados
+    return df_total, duplicados_excel, inserir_unicos, duplicados_lote
