@@ -18,13 +18,11 @@
 
       --radius:16px;
       --shadow:0 10px 30px rgba(0,0,0,.30);
-      /* Tipografia responsiva */
       --fz-sm: clamp(12px, 0.9vw, 14px);
       --fz-md: clamp(14px, 1.05vw, 16px);
       --fz-lg: clamp(18px, 2.2vw, 24px);
     }
 
-    /* ====== Reset básico ====== */
     *,*::before,*::after{ box-sizing: border-box; }
     html,body{ height:100%; }
     body{
@@ -38,71 +36,44 @@
       -moz-osx-font-smoothing: grayscale;
     }
 
-    /* ====== Estrutura ====== */
     .container{ max-width:1180px; margin:clamp(16px,3vw,36px) auto 28px; padding:0 clamp(10px,2.5vw,16px); }
     .page{ background:var(--card); border-radius:var(--radius); padding:clamp(16px,2.8vw,24px); box-shadow:var(--shadow); }
     .title{ margin:0 0 12px; font-weight:800; letter-spacing:.3px; font-size:var(--fz-lg); }
 
-    .grid{
-      display:grid;
-      grid-template-columns: 1fr;
-      gap: clamp(12px,2vw,18px);
-    }
-    @media (min-width:640px){
-      .grid{ grid-template-columns: 1.2fr .8fr; }
-    }
-    @media (min-width:900px){
-      .grid{ grid-template-columns: 2fr 1fr; }
-    }
+    .grid{ display:grid; grid-template-columns: 1fr; gap: clamp(12px,2vw,18px); }
+    @media (min-width:640px){ .grid{ grid-template-columns: 1.2fr .8fr; } }
+    @media (min-width:900px){ .grid{ grid-template-columns: 2fr 1fr; } }
 
     .card{ background:var(--panel); border-radius:var(--radius); padding:clamp(14px,2.2vw,18px); }
     .muted{ color:var(--muted); }
 
-    /* ====== Uploader ====== */
-    .uploader{
-      border:2px dashed #334155; border-radius:12px;
-      padding:clamp(12px,2vw,18px);
-      text-align:left;               /* alinhado à esquerda como no print */
-    }
+    .uploader{ border:2px dashed #334155; border-radius:12px; padding:clamp(12px,2vw,18px); text-align:left; }
     input[type=file]{ width:100%; margin:8px 0 10px; font-size:var(--fz-sm); }
-    .actions{
-      display:flex; gap:10px;
-      flex-direction:row;            /* desktop: em linha */
-      align-items:center;
-    }
-    @media (max-width:479px){
-      .actions{ flex-direction:column; }   /* mobile: empilhado */
-    }
+    .actions{ display:flex; gap:10px; flex-direction:row; align-items:center; }
+    @media (max-width:479px){ .actions{ flex-direction:column; } }
 
-    /* Botão pequeno (desktop) e 100% apenas no mobile */
     button{
-      width:auto;                    /* <<< volta ao tamanho do conteúdo */
+      width:auto;
       background:var(--accent);
       color:var(--accent-contrast);
       border:none;
-      padding:8px 14px;             /* <<< menor, como no print */
-      border-radius:6px;            /* <<< raio menor */
-      font-weight:600;              /* <<< menos “bold” */
+      padding:8px 14px;
+      border-radius:6px;
+      font-weight:600;
       font-size:var(--fz-sm);
       cursor:pointer;
       transition: transform .06s ease, opacity .2s ease;
       touch-action: manipulation;
     }
-    @media (max-width:479px){
-      button{ width:100%; }         /* no mobile vira 100% */
-    }
+    @media (max-width:479px){ button{ width:100%; } }
     @media (hover:hover){ button:hover{ transform: translateY(-1px); } }
     button:active{ transform: translateY(0); }
     button:disabled{ opacity:.6; cursor:not-allowed; }
     .status{ margin-top:8px; color:var(--muted); font-size:var(--fz-sm); }
 
-    /* ====== Tabela ====== */
     .table-wrap{
-      width:100%;
-      overflow-x:auto;
-      -webkit-overflow-scrolling: touch;
-      border-radius:12px;
-      border:1px solid var(--stroke);
+      width:100%; overflow-x:auto; -webkit-overflow-scrolling: touch;
+      border-radius:12px; border:1px solid var(--stroke);
       background:linear-gradient(#0b1220,#0b1220) padding-box, linear-gradient(transparent,transparent) border-box;
     }
     table{ min-width:680px; width:100%; border-collapse:collapse; }
@@ -111,19 +82,13 @@
     td.right, th.right{ text-align:right; }
     td.mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
 
-    /* ====== Pílulas ====== */
     .pillrow{ display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
     .pill{ background:#0b1220; border:1px solid var(--stroke); border-radius:10px; padding:8px 12px; }
 
-    /* ====== Sidebar ====== */
     .sidebar{ background:#0b1220; border-radius:var(--radius); padding:clamp(14px,2.2vw,18px); }
     .link{ color:#93c5fd; text-decoration:none; word-break:break-all; }
     .version{ text-align:center; margin-top:clamp(16px,2.5vw,28px); color:#64748b; font-size:12px; }
-
-    /* Acessibilidade */
-    @media (prefers-reduced-motion: reduce){
-      *{ transition:none !important; animation:none !important; }
-    }
+    @media (prefers-reduced-motion: reduce){ *{ transition:none !important; animation:none !important; } }
   </style>
 </head>
 <body>
@@ -144,6 +109,7 @@
                 <button id="sendBtn" aria-live="polite">Processar</button>
               </div>
               <div class="status" id="status">Pronto.</div>
+              <div class="status" id="apiInfo"></div>
             </div>
           </section>
 
@@ -187,26 +153,40 @@
               <a id="excelLink" class="link" href="#" target="_blank" rel="noopener">Baixar Excel</a>
             </p>
             <p class="muted" style="margin-top:10px;">
-              Dica: em produção, hospede este HTML e a API no mesmo domínio/servidor para evitar CORS.
+              Dica: em produção, hospede este HTML e a API no mesmo domínio/servidor para evitar CORS/mixed content.
             </p>
           </div>
         </aside>
       </div>
 
-      <div class="version">v1.0.0</div>
+      <div class="version">v1.0.1</div>
     </div>
   </div>
 
 <script>
-/* API base:
-   - Produção: usa o mesmo domínio do front (mesmo host/porta).
-   - Desenvolvimento: fallback para http://127.0.0.1:8000
+/* =========================
+   RESOLUÇÃO DA URL DA API
+   =========================
+   Prioridades:
+   1) Parâmetro de URL ?api=https://sua-api
+   2) Se rodando em localhost/127.0.0.1 → http://127.0.0.1:8000
+   3) Caso contrário: avisa para definir ?api=... (evita "Failed to fetch")
 */
-const sameOrigin = location.protocol + '//' + location.host;
-const API = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-  ? 'http://127.0.0.1:8000'
-  : sameOrigin;
+function getApiBase(){
+  const params = new URLSearchParams(location.search);
+  const p = params.get('api');
+  if (p) return p.replace(/\/+$/,'');
 
+  const host = location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') {
+    return 'http://127.0.0.1:8000';
+  }
+
+  // Sem parâmetro e não é localhost: peça para o usuário informar a API
+  return null;
+}
+
+const API = getApiBase();
 const filesEl   = document.getElementById("files");
 const sendBtn   = document.getElementById("sendBtn");
 const statusEl  = document.getElementById("status");
@@ -220,14 +200,31 @@ const kProc     = document.getElementById("k_proc");
 const kOk       = document.getElementById("k_ok");
 const kNok      = document.getElementById("k_nok");
 const kTime     = document.getElementById("k_time");
+const apiInfo   = document.getElementById("apiInfo");
 
-excelLink.href = API + "/download/excel";
+(function init(){
+  if (!API) {
+    statusEl.textContent = "Defina a API via ?api=https://sua-api (ex.: ?api=http://127.0.0.1:8000)";
+    sendBtn.disabled = true;
+    return;
+  }
+  // Aviso de mixed content (https página → http API)
+  if (location.protocol === 'https:' && API.startsWith('http://')) {
+    apiInfo.textContent = "Aviso: esta página está em HTTPS e a API em HTTP. O navegador deve bloquear (mixed content). Abra este HTML via http local (ex.: http://127.0.0.1:5500) ou sirva a API em HTTPS.";
+  }
+  excelLink.href = API + "/download/excel";
+  apiInfo.textContent = "API: " + API;
+})();
 
 sendBtn.addEventListener("click", async () => {
   const files = filesEl.files;
   if (!files || files.length === 0) {
     alert("Selecione ao menos uma imagem.");
     filesEl.focus();
+    return;
+  }
+  if (!API) {
+    alert("API não configurada. Use ?api=http://127.0.0.1:8000 ou equivalente.");
     return;
   }
 
