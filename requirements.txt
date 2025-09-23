@@ -6,3 +6,5 @@ pandas
 openpyxl
 unidecode
 python-multipart
+# opcionalmente:
+# numpy

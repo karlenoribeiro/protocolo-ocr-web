@@ -9,14 +9,16 @@ from pathlib import Path
 from typing import List
 import uvicorn
 import time
+import re
 
 from .ocr_core import processar_imagem_bytes, consolidar_resultados, EXCEL_PATH
 
-app = FastAPI(title="Protocolo OCR Web", version="1.1")
+app = FastAPI(title="Protocolo OCR Web", version="1.2")
 
+# Em produção, TROQUE ["*"] por ["https://seu-dominio.com", ...]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # ajuste em produção
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -32,7 +34,6 @@ async def extract(files: List[UploadFile] = File(...)):
     resultados = []
     encontrados = 0
 
-    # processa e numera (indice_processamento) cada documento
     for i, f in enumerate(files, start=1):
         content = await f.read()
         r = processar_imagem_bytes(f.filename, content)
@@ -41,16 +42,22 @@ async def extract(files: List[UploadFile] = File(...)):
         if r.get("protocolo_17_digitos"):
             encontrados += 1
 
-    # consolida no Excel (mantém acumulativo)
+    # Consolida no Excel (acumulativo)
     df_total = consolidar_resultados(resultados)
-    total_ok_excel = int(df_total['protocolo_17_digitos'].replace({"": None}).dropna().shape[0])
+
+    # Conta SOMENTE 17 dígitos (robusto contra 'nan', 'None' etc.)
+    if "protocolo_17_digitos" in df_total.columns:
+        col = df_total["protocolo_17_digitos"].astype(str).str.replace(r"\D", "", regex=True)
+        total_ok_excel = int(col[col.str.fullmatch(r"\d{17}")].shape[0])
+    else:
+        total_ok_excel = 0
 
     resumo = {
         "total_docs": len(resultados),
         "processados": len(resultados),
         "encontrados": encontrados,
         "nao_encontrados": len(resultados) - encontrados,
-        "tempo_total_s": round(time.time() - t0, 3)
+        "tempo_total_s": round(time.time() - t0, 3),
     }
 
     return JSONResponse({
@@ -58,7 +65,7 @@ async def extract(files: List[UploadFile] = File(...)):
         "processados": len(resultados),
         "total_protocolos_no_excel": total_ok_excel,
         "excel_path": "/download/excel",
-        "resultados_lote": resultados
+        "resultados_lote": resultados,
     })
 
 @app.get("/download/excel")
@@ -68,7 +75,7 @@ def download_excel():
     return FileResponse(
         EXCEL_PATH,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        filename=EXCEL_PATH.name
+        filename=EXCEL_PATH.name,
     )
 
 if __name__ == "__main__":

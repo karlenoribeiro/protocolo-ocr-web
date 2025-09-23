@@ -5,104 +5,58 @@
   <title>CATEC — Extrator de Protocolos (OCR)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    /* ====== Design tokens ====== */
     :root{
-      --bg:#0f172a;            /* slate-900 */
-      --card:#111827;          /* gray-900 */
-      --panel:#0b1220;         /* custom dark */
-      --text:#e5e7eb;          /* gray-200 */
-      --muted:#9ca3af;         /* gray-400 */
-      --stroke:#1f2937;        /* gray-800 */
-      --accent:#22c55e;        /* green-500 */
-      --accent-contrast:#052e16;
-
-      --radius:16px;
-      --shadow:0 10px 30px rgba(0,0,0,.30);
-      --fz-sm: clamp(12px, 0.9vw, 14px);
-      --fz-md: clamp(14px, 1.05vw, 16px);
-      --fz-lg: clamp(18px, 2.2vw, 24px);
+      --bg:#0f172a; --card:#111827; --panel:#0b1220; --text:#e5e7eb; --muted:#9ca3af;
+      --stroke:#1f2937; --accent:#22c55e; --accent-contrast:#052e16;
+      --radius:16px; --shadow:0 10px 30px rgba(0,0,0,.30);
+      --fz-sm: clamp(12px, 0.9vw, 14px); --fz-md: clamp(14px, 1.05vw, 16px); --fz-lg: clamp(18px, 2.2vw, 24px);
     }
-
-    *,*::before,*::after{ box-sizing: border-box; }
-    html,body{ height:100%; }
-    body{
-      margin:0;
-      font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial,sans-serif;
-      background:var(--bg);
-      color:var(--text);
-      font-size: var(--fz-md);
-      line-height:1.45;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-    }
-
-    .container{ max-width:1180px; margin:clamp(16px,3vw,36px) auto 28px; padding:0 clamp(10px,2.5vw,16px); }
-    .page{ background:var(--card); border-radius:var(--radius); padding:clamp(16px,2.8vw,24px); box-shadow:var(--shadow); }
-    .title{ margin:0 0 12px; font-weight:800; letter-spacing:.3px; font-size:var(--fz-lg); }
-
-    .grid{ display:grid; grid-template-columns: 1fr; gap: clamp(12px,2vw,18px); }
-    @media (min-width:640px){ .grid{ grid-template-columns: 1.2fr .8fr; } }
-    @media (min-width:900px){ .grid{ grid-template-columns: 2fr 1fr; } }
-
-    .card{ background:var(--panel); border-radius:var(--radius); padding:clamp(14px,2.2vw,18px); }
-    .muted{ color:var(--muted); }
-
-    .uploader{ border:2px dashed #334155; border-radius:12px; padding:clamp(12px,2vw,18px); text-align:left; }
-    input[type=file]{ width:100%; margin:8px 0 10px; font-size:var(--fz-sm); }
-    .actions{ display:flex; gap:10px; flex-direction:row; align-items:center; }
-    @media (max-width:479px){ .actions{ flex-direction:column; } }
-
-    button{
-      width:auto;
-      background:var(--accent);
-      color:var(--accent-contrast);
-      border:none;
-      padding:8px 14px;
-      border-radius:6px;
-      font-weight:600;
-      font-size:var(--fz-sm);
-      cursor:pointer;
-      transition: transform .06s ease, opacity .2s ease;
-      touch-action: manipulation;
-    }
-    @media (max-width:479px){ button{ width:100%; } }
-    @media (hover:hover){ button:hover{ transform: translateY(-1px); } }
-    button:active{ transform: translateY(0); }
-    button:disabled{ opacity:.6; cursor:not-allowed; }
-    .status{ margin-top:8px; color:var(--muted); font-size:var(--fz-sm); }
-
-    .table-wrap{
-      width:100%; overflow-x:auto; -webkit-overflow-scrolling: touch;
-      border-radius:12px; border:1px solid var(--stroke);
-      background:linear-gradient(#0b1220,#0b1220) padding-box, linear-gradient(transparent,transparent) border-box;
-    }
-    table{ min-width:680px; width:100%; border-collapse:collapse; }
-    th,td{ padding:10px; border-bottom:1px solid var(--stroke); font-size:var(--fz-sm); vertical-align:top; }
-    th{ text-align:left; color:#cbd5e1; position:sticky; top:0; background:#0b1220; }
-    td.right, th.right{ text-align:right; }
-    td.mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
-
-    .pillrow{ display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
-    .pill{ background:#0b1220; border:1px solid var(--stroke); border-radius:10px; padding:8px 12px; }
-
-    .sidebar{ background:#0b1220; border-radius:var(--radius); padding:clamp(14px,2.2vw,18px); }
-    .link{ color:#93c5fd; text-decoration:none; word-break:break-all; }
-    .version{ text-align:center; margin-top:clamp(16px,2.5vw,28px); color:#64748b; font-size:12px; }
-    @media (prefers-reduced-motion: reduce){ *{ transition:none !important; animation:none !important; } }
+    *,*::before,*::after{ box-sizing:border-box }
+    html,body{ height:100% }
+    body{ margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial,sans-serif;
+      background:var(--bg); color:var(--text); font-size:var(--fz-md); line-height:1.45;
+      -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
+    .container{ max-width:1180px; margin:clamp(16px,3vw,36px) auto 28px; padding:0 clamp(10px,2.5vw,16px) }
+    .page{ background:var(--card); border-radius:var(--radius); padding:clamp(16px,2.8vw,24px); box-shadow:var(--shadow) }
+    .title{ margin:0 0 12px; font-weight:800; letter-spacing:.3px; font-size:var(--fz-lg) }
+    .grid{ display:grid; grid-template-columns:1fr; gap:clamp(12px,2vw,18px) }
+    @media (min-width:640px){ .grid{ grid-template-columns:1.2fr .8fr } }
+    @media (min-width:900px){ .grid{ grid-template-columns:2fr 1fr } }
+    .card{ background:var(--panel); border-radius:var(--radius); padding:clamp(14px,2.2vw,18px) }
+    .muted{ color:var(--muted) }
+    .uploader{ border:2px dashed #334155; border-radius:12px; padding:clamp(12px,2vw,18px); text-align:left }
+    input[type=file]{ width:100%; margin:8px 0 10px; font-size:var(--fz-sm) }
+    .actions{ display:flex; gap:10px; flex-direction:row; align-items:center }
+    @media (max-width:479px){ .actions{ flex-direction:column } }
+    button{ width:auto; background:var(--accent); color:var(--accent-contrast); border:none; padding:8px 14px;
+      border-radius:6px; font-weight:600; font-size:var(--fz-sm); cursor:pointer; transition:transform .06s,opacity .2s }
+    @media (max-width:479px){ button{ width:100% } }
+    @media (hover:hover){ button:hover{ transform:translateY(-1px) } }
+    button:active{ transform:translateY(0) } button:disabled{ opacity:.6; cursor:not-allowed }
+    .status{ margin-top:8px; color:var(--muted); font-size:var(--fz-sm) }
+    .table-wrap{ width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; border-radius:12px; border:1px solid var(--stroke);
+      background:linear-gradient(#0b1220,#0b1220) padding-box, linear-gradient(transparent,transparent) border-box }
+    table{ min-width:680px; width:100%; border-collapse:collapse }
+    th,td{ padding:10px; border-bottom:1px solid var(--stroke); font-size:var(--fz-sm); vertical-align:top }
+    th{ text-align:left; color:#cbd5e1; position:sticky; top:0; background:#0b1220 }
+    td.right, th.right{ text-align:right } td.mono{ font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace }
+    .pillrow{ display:flex; gap:10px; flex-wrap:wrap; margin-top:8px }
+    .pill{ background:#0b1220; border:1px solid var(--stroke); border-radius:10px; padding:8px 12px }
+    .sidebar{ background:#0b1220; border-radius:var(--radius); padding:clamp(14px,2.2vw,18px) }
+    .link{ color:#93c5fd; text-decoration:none; word-break:break-all }
+    .version{ text-align:center; margin-top:clamp(16px,2.5vw,28px); color:#64748b; font-size:12px }
+    @media (prefers-reduced-motion:reduce){ *{ transition:none!important; animation:none!important } }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="page">
       <h1 class="title">CATEC — Extrator de Protocolos (OCR)</h1>
-
       <div class="grid">
-        <!-- Coluna esquerda -->
         <div>
           <section class="card" style="margin-bottom:clamp(10px,1.8vw,16px);">
             <h3 style="margin:0 0 6px;">Enviar imagens</h3>
             <p class="muted" style="margin:0 0 10px;">Selecione uma ou mais imagens (png, jpg, jpeg, tif, tiff, bmp, webp, jfif)</p>
-
             <div class="uploader">
               <input id="files" type="file" accept="image/*,.tif,.tiff,.bmp,.webp,.jfif" multiple />
               <div class="actions">
@@ -115,17 +69,12 @@
 
           <section>
             <h3 style="margin:0 0 10px;">Resultados deste lote</h3>
-
             <div class="table-wrap" id="tableWrap" style="display:none;">
               <table id="table">
                 <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Arquivo</th>
-                    <th>Protocolo (OCR)</th>
-                    <th>Protocolo (17 dígitos)</th>
-                    <th class="right">Data extração</th>
-                  </tr>
+                <tr>
+                  <th>#</th><th>Arquivo</th><th>Protocolo (OCR)</th><th>Protocolo (17 dígitos)</th><th class="right">Data extração</th>
+                </tr>
                 </thead>
                 <tbody></tbody>
               </table>
@@ -144,73 +93,62 @@
           </section>
         </div>
 
-        <!-- Coluna direita -->
         <aside>
           <div class="sidebar">
             <h3 style="margin:0 0 6px;">Planilha consolidada</h3>
             <p class="muted" id="totais" style="margin:0 0 10px;">Total de protocolos (no Excel): 0</p>
-            <p style="margin:0 0 6px;">
-              <a id="excelLink" class="link" href="#" target="_blank" rel="noopener">Baixar Excel</a>
-            </p>
-            <p class="muted" style="margin-top:10px;">
-              Dica: em produção, hospede este HTML e a API no mesmo domínio/servidor para evitar CORS/mixed content.
-            </p>
+            <p style="margin:0 0 6px;"><a id="excelLink" class="link" href="#" target="_blank" rel="noopener">Baixar Excel</a></p>
+            <p class="muted" style="margin-top:10px;">Dica: em produção, hospede este HTML e a API no mesmo domínio/servidor para evitar CORS/mixed content.</p>
           </div>
         </aside>
       </div>
-
-      <div class="version">v1.0.1</div>
+      <div class="version">v1.0.2</div>
     </div>
   </div>
 
 <script>
-/* =========================
-   RESOLUÇÃO DA URL DA API
-   =========================
-   Prioridades:
-   1) Parâmetro de URL ?api=https://sua-api
-   2) Se rodando em localhost/127.0.0.1 → http://127.0.0.1:8000
-   3) Caso contrário: avisa para definir ?api=... (evita "Failed to fetch")
-*/
-function getApiBase(){
+function resolveApiBase(){
   const params = new URLSearchParams(location.search);
-  const p = params.get('api');
-  if (p) return p.replace(/\/+$/,'');
-
-  const host = location.hostname;
-  if (host === 'localhost' || host === '127.0.0.1') {
-    return 'http://127.0.0.1:8000';
+  const qs = params.get('api');
+  if (qs) {
+    try { localStorage.setItem('ocr_api_base', qs); } catch(e){}
+    return qs.replace(/\/+$/,'');
   }
-
-  // Sem parâmetro e não é localhost: peça para o usuário informar a API
+  try {
+    const saved = localStorage.getItem('ocr_api_base');
+    if (saved) return saved.replace(/\/+$/,'');
+  } catch(e){}
+  const host = location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') return 'http://127.0.0.1:8000';
   return null;
 }
 
-const API = getApiBase();
-const filesEl   = document.getElementById("files");
-const sendBtn   = document.getElementById("sendBtn");
-const statusEl  = document.getElementById("status");
+const API     = resolveApiBase();
+const filesEl = document.getElementById("files");
+const sendBtn = document.getElementById("sendBtn");
+const statusEl= document.getElementById("status");
 const tableWrap = document.getElementById("tableWrap");
 const tableBody = document.querySelector("#table tbody");
 const excelLink = document.getElementById("excelLink");
-const totals    = document.getElementById("totais");
+const totals  = document.getElementById("totais");
 const resumoBox = document.getElementById("resumoBox");
-const kTotal    = document.getElementById("k_total");
-const kProc     = document.getElementById("k_proc");
-const kOk       = document.getElementById("k_ok");
-const kNok      = document.getElementById("k_nok");
-const kTime     = document.getElementById("k_time");
-const apiInfo   = document.getElementById("apiInfo");
+const kTotal = document.getElementById("k_total");
+const kProc  = document.getElementById("k_proc");
+const kOk    = document.getElementById("k_ok");
+const kNok   = document.getElementById("k_nok");
+const kTime  = document.getElementById("k_time");
+const apiInfo= document.getElementById("apiInfo");
 
 (function init(){
   if (!API) {
     statusEl.textContent = "Defina a API via ?api=https://sua-api (ex.: ?api=http://127.0.0.1:8000)";
     sendBtn.disabled = true;
+    excelLink.removeAttribute('href');
     return;
   }
-  // Aviso de mixed content (https página → http API)
   if (location.protocol === 'https:' && API.startsWith('http://')) {
-    apiInfo.textContent = "Aviso: esta página está em HTTPS e a API em HTTP. O navegador deve bloquear (mixed content). Abra este HTML via http local (ex.: http://127.0.0.1:5500) ou sirva a API em HTTPS.";
+    apiInfo.textContent = "Aviso: esta página está em HTTPS e a API em HTTP. O navegador deve bloquear (mixed content). Use a API em HTTPS ou abra este HTML por HTTP local.";
+    sendBtn.disabled = true;
   }
   excelLink.href = API + "/download/excel";
   apiInfo.textContent = "API: " + API;
@@ -219,14 +157,9 @@ const apiInfo   = document.getElementById("apiInfo");
 sendBtn.addEventListener("click", async () => {
   const files = filesEl.files;
   if (!files || files.length === 0) {
-    alert("Selecione ao menos uma imagem.");
-    filesEl.focus();
-    return;
+    alert("Selecione ao menos uma imagem."); filesEl.focus(); return;
   }
-  if (!API) {
-    alert("API não configurada. Use ?api=http://127.0.0.1:8000 ou equivalente.");
-    return;
-  }
+  if (!API){ alert("API não configurada."); return; }
 
   sendBtn.disabled = true;
   statusEl.textContent = "Enviando e processando...";
@@ -237,10 +170,8 @@ sendBtn.addEventListener("click", async () => {
   try {
     const res = await fetch(API + "/extract", { method: "POST", body: form });
     if (!res.ok) throw new Error("Falha no processamento (" + res.status + ")");
-
     const data = await res.json();
 
-    // Resumo
     if (data.resumo) {
       resumoBox.style.display = "block";
       kTotal.textContent = data.resumo.total_docs ?? 0;
@@ -250,7 +181,6 @@ sendBtn.addEventListener("click", async () => {
       kTime.textContent  = data.resumo.tempo_total_s ?? 0;
     }
 
-    // Tabela
     tableBody.innerHTML = "";
     for (const r of (data.resultados_lote || [])) {
       const tr = document.createElement("tr");
@@ -259,13 +189,11 @@ sendBtn.addEventListener("click", async () => {
         <td>${r.arquivo || ""}</td>
         <td>${r.protocolo_ocr || ""}</td>
         <td class="mono">${r.protocolo_17_digitos || ""}</td>
-        <td class="right">${r.data_extracao || ""}</td>
-      `;
+        <td class="right">${r.data_extracao || ""}</td>`;
       tableBody.appendChild(tr);
     }
     tableWrap.style.display = (data.resultados_lote && data.resultados_lote.length) ? "block" : "none";
 
-    // Excel acumulado
     totals.textContent = "Total de protocolos (no Excel): " + (data.total_protocolos_no_excel ?? 0);
     excelLink.href = API + (data.excel_path || "/download/excel");
 
