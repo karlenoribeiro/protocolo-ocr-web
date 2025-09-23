@@ -1,165 +1,106 @@
 <!doctype html>
 <html lang="pt-br">
 <head>
-  <meta charset="utf-8" />
-  <title>CATEC — Extrator de Protocolos (OCR)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8">
+  <title>Extração de Protocolos (17 dígitos)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    :root{
-      --bg:#0f172a; --card:#111827; --panel:#0b1220; --text:#e5e7eb; --muted:#9ca3af;
-      --stroke:#1f2937; --accent:#22c55e; --accent-contrast:#052e16;
-      --radius:16px; --shadow:0 10px 30px rgba(0,0,0,.30);
-      --fz-sm: clamp(12px, 0.9vw, 14px); --fz-md: clamp(14px, 1.05vw, 16px); --fz-lg: clamp(18px, 2.2vw, 24px);
-    }
-    *,*::before,*::after{ box-sizing:border-box }
-    html,body{ height:100% }
-    body{ margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial,sans-serif;
-      background:var(--bg); color:var(--text); font-size:var(--fz-md); line-height:1.45;
-      -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
-    .container{ max-width:1180px; margin:clamp(16px,3vw,36px) auto 28px; padding:0 clamp(10px,2.5vw,16px) }
-    .page{ background:var(--card); border-radius:var(--radius); padding:clamp(16px,2.8vw,24px); box-shadow:var(--shadow) }
-    .title{ margin:0 0 12px; font-weight:800; letter-spacing:.3px; font-size:var(--fz-lg) }
-    .grid{ display:grid; grid-template-columns:1fr; gap:clamp(12px,2vw,18px) }
-    @media (min-width:640px){ .grid{ grid-template-columns:1.2fr .8fr } }
-    @media (min-width:900px){ .grid{ grid-template-columns:2fr 1fr } }
-    .card{ background:var(--panel); border-radius:var(--radius); padding:clamp(14px,2.2vw,18px) }
-    .muted{ color:var(--muted) }
-    .uploader{ border:2px dashed #334155; border-radius:12px; padding:clamp(12px,2vw,18px); text-align:left }
-    input[type=file]{ width:100%; margin:8px 0 10px; font-size:var(--fz-sm) }
-    .actions{ display:flex; gap:10px; flex-direction:row; align-items:center }
-    @media (max-width:479px){ .actions{ flex-direction:column } }
-    button{ width:auto; background:var(--accent); color:var(--accent-contrast); border:none; padding:8px 14px;
-      border-radius:6px; font-weight:600; font-size:var(--fz-sm); cursor:pointer; transition:transform .06s,opacity .2s }
-    @media (max-width:479px){ button{ width:100% } }
-    @media (hover:hover){ button:hover{ transform:translateY(-1px) } }
-    button:active{ transform:translateY(0) } button:disabled{ opacity:.6; cursor:not-allowed }
-    .status{ margin-top:8px; color:var(--muted); font-size:var(--fz-sm) }
-    .table-wrap{ width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; border-radius:12px; border:1px solid var(--stroke);
-      background:linear-gradient(#0b1220,#0b1220) padding-box, linear-gradient(transparent,transparent) border-box }
-    table{ min-width:680px; width:100%; border-collapse:collapse }
-    th,td{ padding:10px; border-bottom:1px solid var(--stroke); font-size:var(--fz-sm); vertical-align:top }
-    th{ text-align:left; color:#cbd5e1; position:sticky; top:0; background:#0b1220 }
-    td.right, th.right{ text-align:right } td.mono{ font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace }
-    .pillrow{ display:flex; gap:10px; flex-wrap:wrap; margin-top:8px }
-    .pill{ background:#0b1220; border:1px solid var(--stroke); border-radius:10px; padding:8px 12px }
-    .sidebar{ background:#0b1220; border-radius:var(--radius); padding:clamp(14px,2.2vw,18px) }
-    .link{ color:#93c5fd; text-decoration:none; word-break:break-all }
-    .version{ text-align:center; margin-top:clamp(16px,2.5vw,28px); color:#64748b; font-size:12px }
-    @media (prefers-reduced-motion:reduce){ *{ transition:none!important; animation:none!important } }
+    :root { --bg:#0f172a; --card:#111827; --text:#e5e7eb; --muted:#9ca3af; --accent:#22c55e; }
+    body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif; background:var(--bg); color:var(--text);}
+    .container { max-width:900px; margin:40px auto; padding:0 16px; }
+    .card { background:var(--card); border-radius:16px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,.3); }
+    h1 { margin:0 0 8px; font-weight:700; }
+    p.sub { color:var(--muted); margin-top:0; }
+    .uploader { border:2px dashed #334155; border-radius:12px; padding:20px; text-align:center; }
+    input[type=file]{ width:100%; margin:8px 0; }
+    button{ background:var(--accent); border:none; color:#052e16; padding:12px 18px; border-radius:10px; font-weight:700; cursor:pointer;}
+    button:disabled{ opacity:.6; cursor:not-allowed; }
+    .status{ margin-top:16px; color:var(--muted); }
+    table{ width:100%; border-collapse:collapse; margin-top:16px; }
+    th,td{ padding:10px; border-bottom:1px solid #1f2937; font-size:14px; }
+    th{ text-align:left; color:#cbd5e1; }
+    .right{ text-align:right; }
+    .grid{ display:grid; gap:16px; grid-template-columns:1fr; }
+    @media(min-width:700px){ .grid{ grid-template-columns:2fr 1fr; } }
+    .kpi{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+    .pill{ background:#0b1220; border-radius:10px; padding:10px 12px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="page">
-      <h1 class="title">CATEC — Extrator de Protocolos (OCR)</h1>
+    <div class="card">
+      <h1>Extração de Protocolos (17 dígitos)</h1>
+      <p class="sub">Envie imagens (.jpg, .png, .tif...) para reconhecer o número de protocolo. O Excel é acumulativo.</p>
+
       <div class="grid">
         <div>
-          <section class="card" style="margin-bottom:clamp(10px,1.8vw,16px);">
-            <h3 style="margin:0 0 6px;">Enviar imagens</h3>
-            <p class="muted" style="margin:0 0 10px;">Selecione uma ou mais imagens (png, jpg, jpeg, tif, tiff, bmp, webp, jfif)</p>
-            <div class="uploader">
-              <input id="files" type="file" accept="image/*,.tif,.tiff,.bmp,.webp,.jfif" multiple />
-              <div class="actions">
-                <button id="sendBtn" aria-live="polite">Processar</button>
-              </div>
-              <div class="status" id="status">Pronto.</div>
-              <div class="status" id="apiInfo"></div>
-            </div>
-          </section>
+          <div class="uploader">
+            <input id="files" type="file" accept="image/*,.tif,.tiff,.bmp,.webp,.jfif" multiple>
+            <button id="sendBtn">Processar</button>
+            <div class="status" id="status">Pronto.</div>
+          </div>
 
-          <section>
-            <h3 style="margin:0 0 10px;">Resultados deste lote</h3>
-            <div class="table-wrap" id="tableWrap" style="display:none;">
-              <table id="table">
-                <thead>
-                <tr>
-                  <th>#</th><th>Arquivo</th><th>Protocolo (OCR)</th><th>Protocolo (17 dígitos)</th><th class="right">Data extração</th>
-                </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
+          <div id="resumoBox" class="card" style="background:#0b1220; display:none; margin-top:16px;">
+            <h3 style="margin:0 0 8px;">Resumo do Lote</h3>
+            <div class="kpi">
+              <span class="pill">Total: <b id="k_total">0</b></span>
+              <span class="pill">Processados: <b id="k_proc">0</b></span>
+              <span class="pill">Encontrados: <b id="k_ok">0</b></span>
+              <span class="pill">Não encontrados: <b id="k_nok">0</b></span>
+              <span class="pill">Tempo (s): <b id="k_time">0</b></span>
             </div>
+          </div>
 
-            <div id="resumoBox" class="card" style="display:none; margin-top:12px;">
-              <h3 style="margin:0 0 8px;">Resumo do lote</h3>
-              <div class="pillrow">
-                <span class="pill">Total: <b id="k_total">0</b></span>
-                <span class="pill">Processados: <b id="k_proc">0</b></span>
-                <span class="pill">Encontrados: <b id="k_ok">0</b></span>
-                <span class="pill">Não encontrados: <b id="k_nok">0</b></span>
-                <span class="pill">Tempo (s): <b id="k_time">0</b></span>
-              </div>
-            </div>
-          </section>
+          <table id="table" style="display:none">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Arquivo</th>
+                <th>Protocolo (formatado)</th>
+                <th>17 dígitos</th>
+                <th class="right">Data extração</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
         </div>
 
-        <aside>
-          <div class="sidebar">
-            <h3 style="margin:0 0 6px;">Planilha consolidada</h3>
-            <p class="muted" id="totais" style="margin:0 0 10px;">Total de protocolos (no Excel): 0</p>
-            <p style="margin:0 0 6px;"><a id="excelLink" class="link" href="#" target="_blank" rel="noopener">Baixar Excel</a></p>
-            <p class="muted" style="margin-top:10px;">Dica: em produção, hospede este HTML e a API no mesmo domínio/servidor para evitar CORS/mixed content.</p>
+        <div>
+          <div class="card" style="background:#0b1220">
+            <h3 style="margin-top:0">Planilha Excel</h3>
+            <p class="sub">Baixe sempre a versão atualizada (consolidada).</p>
+            <p><a id="excelLink" class="link" href="#" target="_blank" rel="noopener" style="color:#93c5fd;">Baixar Excel</a></p>
+            <p class="sub" id="totais"></p>
           </div>
-        </aside>
+        </div>
       </div>
-      <div class="version">v1.0.2</div>
     </div>
   </div>
 
 <script>
-function resolveApiBase(){
-  const params = new URLSearchParams(location.search);
-  const qs = params.get('api');
-  if (qs) {
-    try { localStorage.setItem('ocr_api_base', qs); } catch(e){}
-    return qs.replace(/\/+$/,'');
-  }
-  try {
-    const saved = localStorage.getItem('ocr_api_base');
-    if (saved) return saved.replace(/\/+$/,'');
-  } catch(e){}
-  const host = location.hostname;
-  if (host === 'localhost' || host === '127.0.0.1') return 'http://127.0.0.1:8000';
-  return null;
-}
-
-const API     = resolveApiBase();
+const API = "http://127.0.0.1:8000";
 const filesEl = document.getElementById("files");
 const sendBtn = document.getElementById("sendBtn");
-const statusEl= document.getElementById("status");
-const tableWrap = document.getElementById("tableWrap");
-const tableBody = document.querySelector("#table tbody");
+const statusEl = document.getElementById("status");
+const table = document.getElementById("table");
+const tbody = table.querySelector("tbody");
 const excelLink = document.getElementById("excelLink");
-const totals  = document.getElementById("totais");
+const totals = document.getElementById("totais");
 const resumoBox = document.getElementById("resumoBox");
 const kTotal = document.getElementById("k_total");
 const kProc  = document.getElementById("k_proc");
 const kOk    = document.getElementById("k_ok");
 const kNok   = document.getElementById("k_nok");
 const kTime  = document.getElementById("k_time");
-const apiInfo= document.getElementById("apiInfo");
 
-(function init(){
-  if (!API) {
-    statusEl.textContent = "Defina a API via ?api=https://sua-api (ex.: ?api=http://127.0.0.1:8000)";
-    sendBtn.disabled = true;
-    excelLink.removeAttribute('href');
-    return;
-  }
-  if (location.protocol === 'https:' && API.startsWith('http://')) {
-    apiInfo.textContent = "Aviso: esta página está em HTTPS e a API em HTTP. O navegador deve bloquear (mixed content). Use a API em HTTPS ou abra este HTML por HTTP local.";
-    sendBtn.disabled = true;
-  }
-  excelLink.href = API + "/download/excel";
-  apiInfo.textContent = "API: " + API;
-})();
+excelLink.href = API + "/download/excel";
 
-sendBtn.addEventListener("click", async () => {
+sendBtn.onclick = async () => {
   const files = filesEl.files;
   if (!files || files.length === 0) {
-    alert("Selecione ao menos uma imagem."); filesEl.focus(); return;
+    alert("Selecione ao menos uma imagem.");
+    return;
   }
-  if (!API){ alert("API não configurada."); return; }
 
   sendBtn.disabled = true;
   statusEl.textContent = "Enviando e processando...";
@@ -169,9 +110,10 @@ sendBtn.addEventListener("click", async () => {
 
   try {
     const res = await fetch(API + "/extract", { method: "POST", body: form });
-    if (!res.ok) throw new Error("Falha no processamento (" + res.status + ")");
+    if (!res.ok) throw new Error("Falha no processamento");
     const data = await res.json();
 
+    // RESUMO DO LOTE
     if (data.resumo) {
       resumoBox.style.display = "block";
       kTotal.textContent = data.resumo.total_docs ?? 0;
@@ -181,19 +123,22 @@ sendBtn.addEventListener("click", async () => {
       kTime.textContent  = data.resumo.tempo_total_s ?? 0;
     }
 
-    tableBody.innerHTML = "";
-    for (const r of (data.resultados_lote || [])) {
+    // TABELA
+    tbody.innerHTML = "";
+    for (const r of data.resultados_lote) {
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${r.indice_processamento ?? ""}</td>
         <td>${r.arquivo || ""}</td>
         <td>${r.protocolo_ocr || ""}</td>
-        <td class="mono">${r.protocolo_17_digitos || ""}</td>
-        <td class="right">${r.data_extracao || ""}</td>`;
-      tableBody.appendChild(tr);
+        <td style="font-family:monospace">${r.protocolo_17_digitos || ""}</td>
+        <td class="right">${r.data_extracao || ""}</td>
+      `;
+      tbody.appendChild(tr);
     }
-    tableWrap.style.display = (data.resultados_lote && data.resultados_lote.length) ? "block" : "none";
+    table.style.display = "table";
 
+    // Excel / totais acumulados
     totals.textContent = "Total de protocolos (no Excel): " + (data.total_protocolos_no_excel ?? 0);
     excelLink.href = API + (data.excel_path || "/download/excel");
 
@@ -204,7 +149,7 @@ sendBtn.addEventListener("click", async () => {
   } finally {
     sendBtn.disabled = false;
   }
-});
+};
 </script>
 </body>
 </html>

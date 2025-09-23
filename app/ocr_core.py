@@ -1,7 +1,6 @@
 # =======================
 # EXTRAÇÃO DE PROTOCOLOS (17 DÍGITOS) DE IMAGENS
-# Mantém sua lógica; padroniza "protocolo_17_digitos" como 17 dígitos ou ""
-# e evita que None/NaN virem strings "nan"/"None"
+# Mantém sua lógica; apenas acrescenta campo "ok" no resultado por arquivo
 # =======================
 
 import re
@@ -14,7 +13,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Optional, Tuple, List
-from openpyxl import load_workbook  # (mantido caso precise no futuro)
+from openpyxl import load_workbook
 
 LOCAL_TZ = ZoneInfo("America/Belem")
 EXTS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".jfif"}
@@ -72,8 +71,11 @@ def tesseract_config(digits_only=False):
         base += " -c tessedit_char_whitelist=0123456789-/–"
     return base
 
-def ocr_text(img, config): return pytesseract.image_to_string(img, config=config)
-def ocr_data(img, config): return pytesseract.image_to_data(img, output_type=pytesseract.Output.DATAFRAME, config=config)
+def ocr_text(img, config):
+    return pytesseract.image_to_string(img, config=config)
+
+def ocr_data(img, config):
+    return pytesseract.image_to_data(img, output_type=pytesseract.Output.DATAFRAME, config=config)
 
 def find_protocolo_roi(img) -> Optional[Tuple[int,int,int,int]]:
     df = ocr_data(img, tesseract_config(digits_only=False))
@@ -93,8 +95,10 @@ def find_protocolo_roi(img) -> Optional[Tuple[int,int,int,int]]:
     H, W = img.shape[:2]
     pad_y = int(h*2.5)
     pad_x_left = int(w*0.5)
-    x1 = max(0, x - pad_x_left); y1 = max(0, y - pad_y//2)
-    x2 = W; y2 = min(H, y + pad_y)
+    x1 = max(0, x - pad_x_left)
+    y1 = max(0, y - pad_y//2)
+    x2 = W
+    y2 = min(H, y + pad_y)
     return (x1, y1, x2, y2)
 
 PROTO_REGEXES = [
@@ -171,7 +175,7 @@ def processar_imagem_bytes(filename: str, content: bytes):
     return {
         "arquivo": filename,
         "protocolo_ocr": protocolo_fmt,
-        "protocolo_17_digitos": protocolo_17 if protocolo_17 else "",
+        "protocolo_17_digitos": protocolo_17,
         "data_extracao": now_belem_str(),
         "ok": ok
     }
@@ -179,19 +183,11 @@ def processar_imagem_bytes(filename: str, content: bytes):
 EXCEL_PATH = Path(__file__).parent / "data" / "protocolos_extraidos.xlsx"
 EXCEL_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-def _normalize_17(x) -> str:
-    """Retorna 17 dígitos ou string vazia."""
-    if x is None:
-        return ""
-    digits = re.sub(r"\D", "", str(x))
-    return digits if len(digits) == 17 else ""
-
 def salvar_excel_texto(df_total: pd.DataFrame):
-    # Garante texto puro (sem 'nan'/'None') e formatação @ (texto) no Excel
-    if "protocolo_17_digitos" not in df_total.columns:
+    if "protocolo_17_digitos" in df_total.columns:
+        df_total["protocolo_17_digitos"] = df_total["protocolo_17_digitos"].fillna("").astype(str)
+    else:
         df_total["protocolo_17_digitos"] = ""
-    df_total["protocolo_17_digitos"] = df_total["protocolo_17_digitos"].apply(_normalize_17)
-
     with pd.ExcelWriter(EXCEL_PATH, engine="openpyxl", mode="w") as writer:
         df_total.to_excel(writer, index=False, sheet_name="Sheet1")
         ws = writer.book.active
@@ -208,25 +204,16 @@ def salvar_excel_texto(df_total: pd.DataFrame):
 def consolidar_resultados(novos: List[dict]) -> pd.DataFrame:
     # Mantém o mesmo esquema de colunas no Excel
     df_novos = pd.DataFrame(novos, columns=["arquivo","protocolo_ocr","protocolo_17_digitos","data_extracao"])
-    df_novos["protocolo_17_digitos"] = df_novos["protocolo_17_digitos"].apply(_normalize_17)
-
     if EXCEL_PATH.exists():
         try:
-            df_existente = pd.read_excel(EXCEL_PATH, dtype=str)
+            df_existente = pd.read_excel(EXCEL_PATH, dtype={"protocolo_17_digitos": str})
         except Exception:
             df_existente = pd.DataFrame(columns=df_novos.columns)
     else:
         df_existente = pd.DataFrame(columns=df_novos.columns)
-
-    if "protocolo_17_digitos" not in df_existente.columns:
-        df_existente["protocolo_17_digitos"] = ""
-
-    df_existente["protocolo_17_digitos"] = df_existente["protocolo_17_digitos"].apply(_normalize_17)
-
     df_total = pd.concat([df_existente, df_novos], ignore_index=True)
-
-    # Remove duplicatas por (número normalizado, arquivo)
+    if "protocolo_17_digitos" in df_total.columns:
+        df_total["protocolo_17_digitos"] = df_total["protocolo_17_digitos"].astype(str)
     df_total = df_total.drop_duplicates(subset=["protocolo_17_digitos","arquivo"], keep="first")
-
     salvar_excel_texto(df_total)
     return df_total
