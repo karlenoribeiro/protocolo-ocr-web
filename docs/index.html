@@ -1,252 +1,155 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-br">
 <head>
-  <meta charset="utf-8" />
-  <title>Extrator de Protocolos • Web</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8">
+  <title>Extração de Protocolos (17 dígitos)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    :root {
-      --bg: #0a0f1a;
-      --card: #0f1626;
-      --muted: #9fb3c8;
-      --fg: #e8eef6;
-      --accent: #4da3ff;
-      --danger: #ff5577;
-      --ok: #6ddf79;
-    }
-    * { box-sizing: border-box }
-    body {
-      margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-      background: var(--bg); color: var(--fg);
-    }
-    header { padding: 16px; border-bottom: 1px solid #162038 }
-    header h1 { margin: 0; font-size: 1.25rem }
-    .wrap { padding: 16px; max-width: 1200px; margin: 0 auto }
-    .grid {
-      display: grid; gap: 16px;
-      grid-template-columns: 1fr;
-    }
-    @media (min-width: 980px) {
-      .grid { grid-template-columns: 2fr 1fr; }
-    }
-    .card {
-      background: var(--card); border: 1px solid #162038; border-radius: 12px; padding: 16px;
-      box-shadow: 0 4px 16px rgba(0,0,0,.2);
-    }
-    .muted { color: var(--muted) }
-    button, .btn {
-      background: var(--accent); color: #00142b; border: 0; padding: 10px 14px; border-radius: 10px;
-      font-weight: 600; cursor: pointer;
-    }
-    button:disabled { opacity: .5; cursor: not-allowed }
-    input[type=file] { width: 100%; padding: 10px; background: #0b1220; border: 1px dashed #233055; border-radius: 10px; color: var(--muted); }
-    table { width: 100%; border-collapse: collapse; font-size: .95rem }
-    th, td { border-bottom: 1px solid #18213b; padding: 8px; text-align: left }
-    code { background: #0b1220; padding: 2px 6px; border-radius: 6px }
-    .kpi { display: flex; flex-wrap: wrap; gap: 8px; }
-    .pill { background: #0b1220; border: 1px solid #1a2644; padding: 6px 10px; border-radius: 999px; font-size: .9rem }
-    .ok { color: var(--ok) } .err { color: var(--danger) }
-    details summary { cursor: pointer; outline: none }
-    footer { padding: 24px; text-align: center; color: var(--muted) }
+    :root { --bg:#0f172a; --card:#111827; --text:#e5e7eb; --muted:#9ca3af; --accent:#22c55e; }
+    body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif; background:var(--bg); color:var(--text);}
+    .container { max-width:900px; margin:40px auto; padding:0 16px; }
+    .card { background:var(--card); border-radius:16px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,.3); }
+    h1 { margin:0 0 8px; font-weight:700; }
+    p.sub { color:var(--muted); margin-top:0; }
+    .uploader { border:2px dashed #334155; border-radius:12px; padding:20px; text-align:center; }
+    input[type=file]{ width:100%; margin:8px 0; }
+    button{ background:var(--accent); border:none; color:#052e16; padding:12px 18px; border-radius:10px; font-weight:700; cursor:pointer;}
+    button:disabled{ opacity:.6; cursor:not-allowed; }
+    .status{ margin-top:16px; color:var(--muted); }
+    table{ width:100%; border-collapse:collapse; margin-top:16px; }
+    th,td{ padding:10px; border-bottom:1px solid #1f2937; font-size:14px; }
+    th{ text-align:left; color:#cbd5e1; }
+    .right{ text-align:right; }
+    .grid{ display:grid; gap:16px; grid-template-columns:1fr; }
+    @media(min-width:700px){ .grid{ grid-template-columns:2fr 1fr; } }
+    .kpi{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+    .pill{ background:#0b1220; border-radius:10px; padding:10px 12px; }
   </style>
 </head>
 <body>
-  <header class="wrap">
-    <h1>CATEC — <span class="muted">Extrator de Protocolos (OCR)</span></h1>
-  </header>
+  <div class="container">
+    <div class="card">
+      <h1>Extração de Protocolos (17 dígitos)</h1>
+      <p class="sub">Envie imagens (.jpg, .png, .tif...) para reconhecer o número de protocolo. O Excel é acumulativo.</p>
 
-  <main class="wrap">
-    <div class="grid">
-      <div>
-        <div class="card">
-          <h3 style="margin-top:0">Enviar imagens</h3>
-          <p class="muted" style="margin-top:-6px">Selecione uma ou mais imagens (png, jpg, jpeg, tif, tiff, bmp, webp, jfif)</p>
-          <input id="file" type="file" multiple accept=".png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp,.jfif" />
-          <div style="display:flex; gap:8px; margin-top:12px;">
+      <div class="grid">
+        <div>
+          <div class="uploader">
+            <input id="files" type="file" accept="image/*,.tif,.tiff,.bmp,.webp,.jfif" multiple>
             <button id="sendBtn">Processar</button>
-            <span id="status" class="muted"></span>
+            <div class="status" id="status">Pronto.</div>
           </div>
 
-          <!-- Resumo do lote -->
-          <div id="resumoBox" class="card" style="background:#0b1220; margin-top:16px; display:none;">
-            <h3 style="margin:0 0 8px;">Resumo do processamento</h3>
+          <div id="resumoBox" class="card" style="background:#0b1220; display:none; margin-top:16px;">
+            <h3 style="margin:0 0 8px;">Resumo do Lote</h3>
             <div class="kpi">
               <span class="pill">Total: <b id="k_total">0</b></span>
               <span class="pill">Processados: <b id="k_proc">0</b></span>
-              <span class="pill">Encontrados: <b id="k_ok" class="ok">0</b></span>
-              <span class="pill">Não encontrados: <b id="k_nok" class="err">0</b></span>
+              <span class="pill">Encontrados: <b id="k_ok">0</b></span>
+              <span class="pill">Não encontrados: <b id="k_nok">0</b></span>
               <span class="pill">Tempo (s): <b id="k_time">0</b></span>
             </div>
           </div>
 
-          <!-- Alertas / Consolidação -->
-          <div id="alertasBox" class="card" style="background:#0b1220; display:none; margin-top:16px;">
-            <h3 style="margin:0 0 8px;">Alertas & Consolidação</h3>
-            <div class="kpi">
-              <span class="pill">Duplicados no lote: <b id="k_dup_lote">0</b></span>
-              <span class="pill">Já no Excel: <b id="k_dup_excel">0</b></span>
-              <span class="pill">Inseridos agora: <b id="k_inseridos">0</b></span>
-            </div>
-            <div style="display:grid; gap:12px; margin-top:12px;">
-              <details>
-                <summary>Ver duplicados no lote</summary>
-                <ul id="list_dup_lote" style="margin:6px 0 0 18px;"></ul>
-              </details>
-              <details>
-                <summary>Ver duplicados no Excel</summary>
-                <ul id="list_dup_excel" style="margin:6px 0 0 18px;"></ul>
-              </details>
-              <details open>
-                <summary>Ver inseridos</summary>
-                <ul id="list_inseridos" style="margin:6px 0 0 18px;"></ul>
-              </details>
-            </div>
-          </div>
-
-          <!-- Tabela de resultados -->
-          <div class="card" style="background:#0b1220; margin-top:16px;">
-            <h3 style="margin:0 0 8px;">Resultados deste lote</h3>
-            <div style="overflow:auto;">
-              <table id="tbl">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Arquivo</th>
-                    <th>Protocolo (OCR)</th>
-                    <th>Protocolo (17 dígitos)</th>
-                    <th>Data extração</th>
-                  </tr>
-                </thead>
-                <tbody id="tbody"></tbody>
-              </table>
-            </div>
-          </div>
+          <table id="table" style="display:none">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Arquivo</th>
+                <th>Protocolo (formatado)</th>
+                <th>17 dígitos</th>
+                <th class="right">Data extração</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
         </div>
-      </div>
 
-      <!-- Lado direito -->
-      <div>
-        <div class="card">
-          <h3 style="margin-top:0">Planilha consolidada</h3>
-          <p class="muted" id="totals">Total de protocolos (no Excel): 0</p>
-          <a id="excelLink" class="btn" href="#" download>Baixar Excel</a>
-          <p class="muted" style="margin-top:12px; font-size:.9rem">
-            Dica: em produção, hospede este HTML e a API no mesmo domínio/servidor para evitar CORS.
-          </p>
+        <div>
+          <div class="card" style="background:#0b1220">
+            <h3 style="margin-top:0">Planilha Excel</h3>
+            <p class="sub">Baixe sempre a versão atualizada (consolidada).</p>
+            <p><a id="excelLink" class="link" href="#" target="_blank" rel="noopener" style="color:#93c5fd;">Baixar Excel</a></p>
+            <p class="sub" id="totais"></p>
+          </div>
         </div>
       </div>
     </div>
-  </main>
+  </div>
 
-<footer>
-    v<span id="v">1.0.0</span>
-</footer>
+<script>
+const API = "http://127.0.0.1:8000";
+const filesEl = document.getElementById("files");
+const sendBtn = document.getElementById("sendBtn");
+const statusEl = document.getElementById("status");
+const table = document.getElementById("table");
+const tbody = table.querySelector("tbody");
+const excelLink = document.getElementById("excelLink");
+const totals = document.getElementById("totais");
+const resumoBox = document.getElementById("resumoBox");
+const kTotal = document.getElementById("k_total");
+const kProc  = document.getElementById("k_proc");
+const kOk    = document.getElementById("k_ok");
+const kNok   = document.getElementById("k_nok");
+const kTime  = document.getElementById("k_time");
 
+excelLink.href = API + "/download/excel";
 
-  <script>
-    // URL da API (ajuste se rodar remoto)
-    const API = "http://127.0.0.1:8000";
+sendBtn.onclick = async () => {
+  const files = filesEl.files;
+  if (!files || files.length === 0) {
+    alert("Selecione ao menos uma imagem.");
+    return;
+  }
 
-    // Refs
-    const fileInput   = document.getElementById("file");
-    const sendBtn     = document.getElementById("sendBtn");
-    const statusEl    = document.getElementById("status");
-    const resumoBox   = document.getElementById("resumoBox");
-    const kTotal      = document.getElementById("k_total");
-    const kProc       = document.getElementById("k_proc");
-    const kOk         = document.getElementById("k_ok");
-    const kNok        = document.getElementById("k_nok");
-    const kTime       = document.getElementById("k_time");
+  sendBtn.disabled = true;
+  statusEl.textContent = "Enviando e processando...";
 
-    const alertasBox  = document.getElementById("alertasBox");
-    const kDupLote    = document.getElementById("k_dup_lote");
-    const kDupExcel   = document.getElementById("k_dup_excel");
-    const kInseridos  = document.getElementById("k_inseridos");
-    const ulDupLote   = document.getElementById("list_dup_lote");
-    const ulDupExcel  = document.getElementById("list_dup_excel");
-    const ulInseridos = document.getElementById("list_inseridos");
+  const form = new FormData();
+  for (const f of files) form.append("files", f, f.name);
 
-    const tbody       = document.getElementById("tbody");
-    const totals      = document.getElementById("totals");
-    const excelLink   = document.getElementById("excelLink");
-    const vEl         = document.getElementById("v");
+  try {
+    const res = await fetch(API + "/extract", { method: "POST", body: form });
+    if (!res.ok) throw new Error("Falha no processamento");
+    const data = await res.json();
 
-    // Mostra versão da API
-    (async () => {
-      try {
-        const r = await fetch(API + "/ping");
-        const j = await r.json();
-        vEl.textContent = j.version;
-      } catch { vEl.textContent = "offline"; }
-    })();
+    // RESUMO DO LOTE
+    if (data.resumo) {
+      resumoBox.style.display = "block";
+      kTotal.textContent = data.resumo.total_docs ?? 0;
+      kProc.textContent  = data.resumo.processados ?? 0;
+      kOk.textContent    = data.resumo.encontrados ?? 0;
+      kNok.textContent   = data.resumo.nao_encontrados ?? 0;
+      kTime.textContent  = data.resumo.tempo_total_s ?? 0;
+    }
 
-    sendBtn.onclick = async () => {
-      const files = fileInput.files;
-      if (!files || !files.length) {
-        statusEl.textContent = "Selecione pelo menos um arquivo.";
-        return;
-      }
+    // TABELA
+    tbody.innerHTML = "";
+    for (const r of data.resultados_lote) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${r.indice_processamento ?? ""}</td>
+        <td>${r.arquivo || ""}</td>
+        <td>${r.protocolo_ocr || ""}</td>
+        <td style="font-family:monospace">${r.protocolo_17_digitos || ""}</td>
+        <td class="right">${r.data_extracao || ""}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+    table.style.display = "table";
 
-      const form = new FormData();
-      for (const f of files) form.append("files", f);
+    // Excel / totais acumulados
+    totals.textContent = "Total de protocolos (no Excel): " + (data.total_protocolos_no_excel ?? 0);
+    excelLink.href = API + (data.excel_path || "/download/excel");
 
-      sendBtn.disabled = true;
-      statusEl.textContent = "Processando...";
-
-      try {
-        const res = await fetch(API + "/extract", { method: "POST", body: form });
-        if (!res.ok) throw new Error("Falha no processamento");
-        const data = await res.json();
-
-        // RESUMO
-        if (data.resumo) {
-          resumoBox.style.display = "block";
-          kTotal.textContent = data.resumo.total_docs ?? 0;
-          kProc.textContent  = data.resumo.processados ?? 0;
-          kOk.textContent    = data.resumo.encontrados ?? 0;
-          kNok.textContent   = data.resumo.nao_encontrados ?? 0;
-          kTime.textContent  = data.resumo.tempo_total_s ?? 0;
-        }
-
-        // ALERTAS
-        const dupLote   = data.duplicados_lote || [];
-        const dupExcel  = data.duplicados      || [];
-        const inseridos = data.inseridos       || [];
-
-        kDupLote.textContent   = dupLote.length;
-        kDupExcel.textContent  = dupExcel.length;
-        kInseridos.textContent = inseridos.length;
-
-        ulDupLote.innerHTML   = dupLote.map(p => `<li><code>${p}</code></li>`).join("");
-        ulDupExcel.innerHTML  = dupExcel.map(p => `<li><code>${p}</code></li>`).join("");
-        ulInseridos.innerHTML = inseridos.map(p => `<li><code>${p}</code></li>`).join("");
-
-        alertasBox.style.display = (dupLote.length || dupExcel.length || inseridos.length) ? "block" : "none";
-
-        // TABELA (limpa e repopula)
-        tbody.innerHTML = "";
-        const rows = (data.resultados_lote || []).map((r, i) => {
-          return `<tr>
-            <td>${i + 1}</td>
-            <td>${(r.arquivo || "").replace(/</g,'&lt;')}</td>
-            <td><code>${r.protocolo_ocr || ""}</code></td>
-            <td><code>${r.protocolo_17_digitos || ""}</code></td>
-            <td>${r.data_extracao || ""}</td>
-          </tr>`;
-        }).join("");
-        tbody.insertAdjacentHTML("beforeend", rows);
-
-        totals.textContent = "Total de protocolos (no Excel): " + (data.total_protocolos_no_excel ?? 0);
-        excelLink.href = API + (data.excel_path || "/download/excel");
-
-        statusEl.textContent = "Concluído!";
-      } catch (e) {
-        console.error(e);
-        statusEl.textContent = "Erro ao processar. Veja o console.";
-      } finally {
-        sendBtn.disabled = false;
-      }
-    };
-  </script>
+    statusEl.textContent = "Concluído!";
+  } catch (e) {
+    console.error(e);
+    statusEl.textContent = "Erro: " + e.message;
+  } finally {
+    sendBtn.disabled = false;
+  }
+};
+</script>
 </body>
 </html>

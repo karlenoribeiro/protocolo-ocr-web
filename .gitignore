@@ -1,25 +1,22 @@
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-
-# Venv
+# Ambiente virtual
 .venv/
-env/
-venv/
 
-# IDEs
-.vscode/
-.idea/
+# Arquivos compilados do Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-# Dados / saídas locais
+# Planilhas geradas
 *.xlsx
 *.csv
-app/data/
+
+# Arquivo de variáveis de ambiente
+.env
+
+# Arquivos do MacOS
+.DS_Store
+
+# Pastas de upload e saída
 uploads/
 output/
-
-# Cache
-*.log
-*.tmp
-.venv312/ 
