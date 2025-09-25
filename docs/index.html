@@ -217,7 +217,8 @@ const dupListContent = document.getElementById("dup_list_content");
 const footer = document.getElementById("footer");
 
 excelLink.href = API + "/download/excel"; 
-footer.textContent = `v ${APP_VERSION} - Protocolo OCR Web`; // Adiciona versão no rodapé
+// LINHA CORRIGIDA: Removido o 'v ' extra. O APP_VERSION já começa com 'v 1.0.0.0'.
+footer.textContent = `${APP_VERSION} - Protocolo OCR Web`; // Adiciona versão no rodapé
 
 /* ---------- EVENTO DO BOTÃO PROCESSAR ---------- */
 sendBtn.onclick = async () => {
@@ -243,10 +244,10 @@ sendBtn.onclick = async () => {
     if (resumo) {
       resumoBox.style.display = "block"; 
       kTotal.textContent = resumo.total_docs ?? 0;
-      kOk.textContent    = resumo.encontrados_lote ?? 0; 
-      kNew.textContent   = resumo.novos_adicionados ?? 0; 
+      kOk.textContent    = resumo.encontrados_lote ?? 0; 
+      kNew.textContent   = resumo.novos_adicionados ?? 0; 
       kDupIgnore.textContent = resumo.duplicados_ignorar ?? 0; 
-      kTime.textContent  = resumo.tempo_total_s ?? 0;
+      kTime.textContent  = resumo.tempo_total_s ?? 0;
 
       // Exibe lista de duplicados ignorados
       if (resumo.duplicados_lista && resumo.duplicados_lista.length > 0) {
