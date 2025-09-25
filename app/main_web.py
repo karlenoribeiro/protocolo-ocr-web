@@ -1,109 +1,126 @@
+# main_web.py - CÓDIGO CORRIGIDO
+
 # ============================================================
 # API PARA EXTRAÇÃO DE PROTOCOLOS (OCR) — com resumo do lote
 # ============================================================
 
-# Importa classes e funções do framework FastAPI para criar a API
 from fastapi import FastAPI, UploadFile, File
-# Importa classes para respostas HTTP: arquivos, JSON e HTML
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
-# Middleware para permitir comunicação entre diferentes origens (CORS)
 from fastapi.middleware.cors import CORSMiddleware
-# Manipulação de caminhos de arquivos de forma segura e cross-platform
 from pathlib import Path
-# Tipagem para listas e outros tipos avançados
 from typing import List
-# Servidor ASGI utilizado para rodar a aplicação FastAPI
 import uvicorn
-# Biblioteca para medir tempo de execução
 import time
 
-# Importa funções do módulo interno de OCR:
-# - processar_imagem_bytes: processa imagens e extrai protocolos
-# - consolidar_resultados: salva e consolida dados em planilha Excel
-# - EXCEL_PATH: caminho do arquivo Excel utilizado
-from .ocr_core import processar_imagem_bytes, consolidar_resultados, EXCEL_PATH
-
-# Cria a instância principal da aplicação FastAPI
-# Define título e versão que aparecerão na documentação automática
-app = FastAPI(title="Protocolo OCR Web", version="1.1")
-
-# Adiciona configuração de CORS para permitir acesso à API via frontend ou outros domínios
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # "*" permite qualquer origem (ajustar em produção por segurança)
-    allow_credentials=True,  # Permite envio de cookies/autenticação
-    allow_methods=["*"],  # Permite qualquer método HTTP (GET, POST, PUT, DELETE, etc.)
-    allow_headers=["*"],  # Permite qualquer cabeçalho customizado
+# Importa as novas funções/tipos do módulo interno de OCR:
+from .ocr_core import (
+    processar_imagem_bytes, 
+    consolidar_resultados, 
+    ler_protocolos_existentes, # NOVA FUNÇÃO
+    EXCEL_PATH
 )
 
-# Rota GET principal ("/") que retorna um HTML simples com instruções
+app = FastAPI(title="Protocolo OCR Web", version="1.1")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 @app.get("/", response_class=HTMLResponse)
 def root():
-    return "<h1>API Protocolo OCR</h1><p>Use POST /extract</p>"
+    return "<h1>API Protocolo OCR Rodando</h1><p>Use POST /extract</p>"
 
 # Rota POST "/extract" que processa os arquivos enviados
 @app.post("/extract")
 async def extract(files: List[UploadFile] = File(...)):
-    # Marca o tempo inicial para medir o tempo total de processamento
     t0 = time.time()
-    # Lista para armazenar os resultados de cada imagem processada
+    
+    # 1. Pré-leitura: LÊ PROTOCOLOS EXISTENTES (set para checagem rápida)
+    protocolos_existentes, df_existente = ler_protocolos_existentes()
+    
     resultados = []
-    # Contador para saber quantos arquivos tiveram protocolo encontrado
-    encontrados = 0
+    protocolos_do_lote_set = set() # Para checar duplicatas dentro do lote atual (memória)
+    
+    # Contadores
+    encontrados_lote = 0 # Protocolos válidos encontrados neste lote (antes da checagem)
+    novos_adicionados = 0 # Protocolos novos (não duplicados no Excel ou no lote)
+    duplicados_ignorar = [] # Lista de protocolos duplicados a ignorar
+    
+    # Lista dos resultados válidos e não duplicados que serão salvos
+    resultados_para_salvar = []
 
     # Loop para processar cada arquivo enviado
-    # enumerate(files, start=1) gera índice a partir de 1 para cada arquivo
     for i, f in enumerate(files, start=1):
-        # Lê o conteúdo binário do arquivo enviado
         content = await f.read()
-        # Chama a função OCR para processar a imagem
         r = processar_imagem_bytes(f.filename, content)
-        # Adiciona índice de processamento ao resultado para controle
+        
+        protocolo_17 = r.get("protocolo_17_digitos")
+        
+        # 2. Lógica de Checagem de Duplicação
+        is_duplicate = False
+        
+        if protocolo_17:
+            encontrados_lote += 1
+            # Checa se é duplicado no histórico (Excel) OU no lote atual (memória)
+            if protocolo_17 in protocolos_existentes or protocolo_17 in protocolos_do_lote_set:
+                is_duplicate = True
+                duplicados_ignorar.append(protocolo_17)
+            else:
+                # É um protocolo novo. Adiciona ao set do lote para checar futuras duplicações neste mesmo POST
+                protocolos_do_lote_set.add(protocolo_17)
+                novos_adicionados += 1
+                # Adiciona à lista de salvamento (apenas os que não são duplicados)
+                resultados_para_salvar.append(r)
+
         r["indice_processamento"] = i
-        # Adiciona o resultado à lista geral
+        r["ok"] = bool(protocolo_17) # Marca se encontrou o protocolo
+        r["duplicado"] = is_duplicate # Adiciona info de duplicação para o resumo no frontend
         resultados.append(r)
-        # Incrementa contador caso um protocolo válido tenha sido encontrado
-        if r.get("protocolo_17_digitos"):
-            encontrados += 1
 
-    # Consolida os resultados no Excel, mantendo histórico acumulativo
-    df_total = consolidar_resultados(resultados)
-    # Conta o número de protocolos válidos (não nulos) presentes no Excel
-    total_ok_excel = int(df_total['protocolo_17_digitos'].replace({"": None}).dropna().shape[0])
+    # 3. Consolidação no Excel
+    # Passa APENAS os resultados válidos E NÃO DUPLICADOS e o DataFrame existente
+    df_total = consolidar_resultados(resultados_para_salvar, df_existente)
+    
+    # 4. Finaliza Resumo e Resposta
+    # Contabiliza o total de protocolos válidos no Excel (len==17)
+    total_protocolos_validos_excel = int(df_total['protocolo_17_digitos'].str.len().eq(17).sum())
+    
+    # Remove duplicatas da lista de ignorados para o resumo
+    duplicados_unicos_ignorar = sorted(list(set(duplicados_ignorar)))
 
-    # Cria um resumo com informações gerais do lote processado
     resumo = {
-        "total_docs": len(resultados),  # Total de documentos enviados
-        "processados": len(resultados),  # Total de documentos processados
-        "encontrados": encontrados,  # Quantos documentos continham protocolo válido
-        "nao_encontrados": len(resultados) - encontrados,  # Documentos sem protocolo
-        "tempo_total_s": round(time.time() - t0, 3)  # Tempo total de processamento em segundos
+        "total_docs": len(resultados),
+        "processados": len(resultados),
+        "encontrados_lote": encontrados_lote, # Total de protocolos válidos encontrados no lote
+        "novos_adicionados": novos_adicionados, # Total de protocolos NOVOS adicionados (não duplicados)
+        "duplicados_ignorar": len(duplicados_ignorar), # Total de duplicados IGNORADOS (do lote)
+        "duplicados_lista": duplicados_unicos_ignorar, # Lista dos protocolos duplicados ignorados
+        "tempo_total_s": round(time.time() - t0, 3)
     }
 
     # Retorna a resposta em JSON contendo o resumo e os resultados detalhados
     return JSONResponse({
-        "resumo": resumo,  # Dados gerais do lote
-        "processados": len(resultados),  # Total de documentos processados
-        "total_protocolos_no_excel": total_ok_excel,  # Total consolidado no Excel
-        "excel_path": "/download/excel",  # Endpoint para download do Excel
-        "resultados_lote": resultados  # Resultados individuais de cada documento
+        "resumo": resumo,
+        "processados": len(resultados),
+        "total_protocolos_no_excel": total_protocolos_validos_excel,
+        "excel_path": "/download/excel",
+        "resultados_lote": resultados
     })
 
-# Rota GET para download do arquivo Excel consolidado
+# Rota GET para download do arquivo Excel consolidado (Mantida)
 @app.get("/download/excel")
 def download_excel():
-    # Caso o arquivo Excel ainda não exista, retorna erro 404
     if not EXCEL_PATH.exists():
         return JSONResponse({"erro": "Excel ainda não existe"}, status_code=404)
-    # Caso exista, retorna o arquivo como resposta para download
     return FileResponse(
         EXCEL_PATH,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  # Tipo MIME para Excel
-        filename=EXCEL_PATH.name  # Nome do arquivo para download
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=EXCEL_PATH.name
     )
 
-# Executa a aplicação diretamente via uvicorn quando este arquivo for o ponto de entrada
 if __name__ == "__main__":
-    # Inicia o servidor na porta 8000, acessível em todas as interfaces (0.0.0.0)
-    # reload=True reinicia automaticamente quando há alterações no código
-    uvicorn.run("app.main_web:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main_web:app", host="0.0.0.0", port=8000, reload=True)
