@@ -6,142 +6,112 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   
   <style>
-    /* ---------- VARIÁVEIS DE CORES ---------- */
     :root { 
         --bg:#0f172a; 
         --card:#111827; 
         --text:#e5e7eb; 
         --muted:#9ca3af; 
         --accent:#22c55e; 
-        --error:#ef4444; /* Nova cor para erros/duplicados */
+        --error:#ef4444;
     }
-
-    /* ---------- ESTILIZAÇÃO GERAL (Responsiva) ---------- */
     body { 
       margin:0;
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif;
       background:var(--bg);
       color:var(--text);
-      display: flex; 
-      flex-direction: column; 
-      min-height: 100vh; /* Permite o rodapé ficar no fundo */
+      display:flex; 
+      flex-direction:column; 
+      min-height:100vh;
     }
-
-    .container { 
-      max-width:900px; 
-      margin:40px auto; 
-      padding:0 16px; 
-      flex-grow: 1; /* Permite o container crescer */
-    }
-
-    .card { 
-      background:var(--card); 
-      border-radius:16px; 
-      padding:24px; 
-      box-shadow:0 10px 30px rgba(0,0,0,.3); 
-    }
-
+    .container { max-width:900px; margin:40px auto; padding:0 16px; flex-grow:1; }
+    .card { background:var(--card); border-radius:16px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,.3); }
     h1 { margin:0 0 8px; font-weight:700; }
     p.sub { color:var(--muted); margin-top:0; }
 
-    /* Área para upload de arquivos */
     .uploader { 
       border:2px dashed #334155; 
       border-radius:12px; 
       padding:20px; 
-      text-align:center;
-      display: flex; /* Usando flexbox */
-      flex-direction: column;
-      gap: 10px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
     }
 
-    /* Input de upload */
+    .row { display:grid; grid-template-columns: 1fr; gap:10px; }
+    @media (min-width:700px){
+      .row { grid-template-columns: 1fr 1fr 1fr; }
+    }
+
+    label { font-size:12px; color:var(--muted); }
+    select, input[type=text]{
+      padding:10px; background:var(--bg); color:var(--text);
+      border-radius:8px; border:1px solid #334155; width:100%;
+    }
+
     input[type=file]{ padding:10px; background:var(--bg); color:var(--text); border-radius:8px; border: 1px solid #334155; }
-
-    /* Botões padrão */
-    button{ 
-      background:var(--accent);
-      border:none;
-      color:#052e16;
-      padding:12px 18px;
-      border-radius:10px;
-      font-weight:700;
-      cursor:pointer;
-      transition:background 0.2s; 
-    }
+    button{ background:var(--accent); border:none; color:#052e16; padding:12px 18px; border-radius:10px; font-weight:700; cursor:pointer; transition:background .2s; }
     button:hover{ background:#10b981; }
     button:disabled{ opacity:.6; cursor:not-allowed; }
 
-    /* Texto de status */
     .status{ margin-top:16px; color:var(--muted); }
-
-    /* Layout em grid para responsividade */
-    .grid{ display:flex; flex-direction:column; gap:20px; } /* Mobile: Coluna */
-    
-    /* Quando a tela for maior que 700px, divide em 2 colunas */
+    .grid{ display:flex; flex-direction:column; gap:20px; }
     @media(min-width:700px){ 
-      .grid{ flex-direction:row; } /* Desktop: Linha */
-      .grid > div:first-child { flex: 2; } /* Coluna principal 2/3 */
-      .grid > div:last-child { flex: 1; } /* Coluna lateral 1/3 */
+      .grid{ flex-direction:row; }
+      .grid > div:first-child { flex: 2; }
+      .grid > div:last-child { flex: 1; }
     }
 
-    /* Estilo para indicadores numéricos (KPIs) */
     .kpi{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; font-size:0.9em; }
-
-    /* Caixa dos KPIs */
     .pill{ background:var(--bg); border-radius:6px; padding:8px 10px; white-space:nowrap; }
 
-    /* Tabela de resultados */
     table{ width:100%; border-collapse:collapse; margin-top:20px; }
     th,td{ padding:10px; border-bottom:1px solid #1f2937; font-size:14px; }
     th{ text-align:left; color:#cbd5e1; }
     .right{ text-align:right; }
-    
-    /* Linha Duplicada (destaque) */
-    .duplicate-row td { 
-        background-color: #440000 !important; 
-        color: var(--error) !important; 
-        opacity:0.8; 
-    }
+    .duplicate-row td { background-color:#440000 !important; color:var(--error) !important; opacity:0.8; }
 
-    /* Lista de duplicados ignorados */
-    .duplicates-list-box {
-        margin-top: 16px;
-        padding: 10px;
-        background: #0b1220;
-        border: 1px solid var(--error);
-        border-radius: 8px;
-    }
-    .duplicates-list-content {
-        font-family: monospace;
-        font-size: 12px;
-        color: var(--error);
-        word-break: break-all;
-        margin-top: 5px;
-    }
-    
-    /* Rodapé */
-    footer {
-        background: var(--card);
-        color: var(--muted);
-        text-align: center;
-        padding: 10px 0;
-        margin-top: 20px; /* Espaço entre o container e o rodapé */
-        font-size: 12px;
-        width: 100%;
-    }
+    .duplicates-list-box { margin-top:16px; padding:10px; background:#0b1220; border:1px solid var(--error); border-radius:8px; }
+    .duplicates-list-content { font-family:monospace; font-size:12px; color:var(--error); word-break:break-all; margin-top:5px; }
+
+    footer { background:var(--card); color:var(--muted); text-align:center; padding:10px 0; margin-top:20px; font-size:12px; width:100%; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="card">
       <h1>CATEC - Extração de Nº de Protocolos</h1>
-      <p class="sub">Envie imagens (.jpg, .png, .tif...) para reconhecer o número de protocolo. Protocolos duplicados (no lote ou no histórico) **serão ignorados**.</p>
+      <p class="sub">Envie imagens (.jpg, .png, .tif...) para reconhecer o número de protocolo. Protocolos duplicados (no lote ou no histórico) <b>serão ignorados</b>.</p>
 
       <div class="grid">
         <div>
           <div class="uploader">
-            <input id="files" type="file" accept="image/*,.tif,.tiff,.bmp,.webp,.jfif" multiple>
+            <!-- Campos exigidos pelo requisito -->
+            <div class="row">
+              <div>
+                <label for="setor">Setor</label>
+                <select id="setor" required>
+                  <option value="">Selecione...</option>
+                  <option value="CGDOC">CGDOC</option>
+                  <option value="CATEC">CATEC</option>
+                  <option value="CAP">CAP</option>
+                  <option value="Outro">Outro</option>
+                </select>
+              </div>
+              <div>
+                <label for="profissional">Profissional</label>
+                <select id="profissional" required>
+                  <option value="">Selecione...</option>
+                  <option value="Servidor(a)">Servidor(a)</option>
+                  <option value="Estagiário(a)">Estagiário(a)</option>
+                </select>
+              </div>
+              <div>
+                <label for="nomeCompleto">Nome completo</label>
+                <input id="nomeCompleto" type="text" placeholder="Digite seu nome completo" required>
+              </div>
+            </div>
+
+            <input id="files" type="file" accept="image/*,.tif,.tiff,.bmp,.webp,.jfif" multiple required>
             <button id="sendBtn">Processar Arquivos</button>
             <div class="status" id="status">Pronto.</div>
           </div>
@@ -192,46 +162,53 @@
   <footer id="footer"></footer>
 
 <script>
-/* ---------- VARIÁVEIS E ELEMENTOS HTML ---------- */
-const API = "http://127.0.0.1:8000"; 
-// REQUISITO: Versão configurável (v 1.0.0.0)
-const APP_VERSION = "v 1.0.0.0"; 
+const API = "http://127.0.0.1:8000";
+const APP_VERSION = "v 1.0.0.0";
 
-const filesEl = document.getElementById("files"); 
-const sendBtn = document.getElementById("sendBtn"); 
-const statusEl = document.getElementById("status"); 
-const table = document.getElementById("table"); 
-const tbody = table.querySelector("tbody"); 
-const excelLink = document.getElementById("excelLink"); 
-const totals = document.getElementById("totais"); 
-const resumoBox = document.getElementById("resumoBox"); 
+const filesEl = document.getElementById("files");
+const sendBtn = document.getElementById("sendBtn");
+const statusEl = document.getElementById("status");
+const table = document.getElementById("table");
+const tbody = table.querySelector("tbody");
+const excelLink = document.getElementById("excelLink");
+const totals = document.getElementById("totais");
+const resumoBox = document.getElementById("resumoBox");
 
-// Novos elementos para o Resumo
-const kTotal = document.getElementById("k_total"); 
+const kTotal = document.getElementById("k_total");
 const kOk = document.getElementById("k_ok");
-const kNew = document.getElementById("k_new"); 
-const kDupIgnore = document.getElementById("k_dup_ignore"); 
+const kNew = document.getElementById("k_new");
+const kDupIgnore = document.getElementById("k_dup_ignore");
 const kTime = document.getElementById("k_time");
 const duplicatesList = document.getElementById("duplicatesList");
 const dupListContent = document.getElementById("dup_list_content");
 const footer = document.getElementById("footer");
 
-excelLink.href = API + "/download/excel"; 
-// LINHA CORRIGIDA: Removido o 'v ' extra. O APP_VERSION já começa com 'v 1.0.0.0'.
-footer.textContent = `${APP_VERSION} - Protocolo OCR Web`; // Adiciona versão no rodapé
+const setorEl = document.getElementById("setor");
+const profissionalEl = document.getElementById("profissional");
+const nomeCompletoEl = document.getElementById("nomeCompleto");
 
-/* ---------- EVENTO DO BOTÃO PROCESSAR ---------- */
+excelLink.href = API + "/download/excel";
+footer.textContent = `${APP_VERSION} - Protocolo OCR Web`;
+
 sendBtn.onclick = async () => {
   const files = filesEl.files; 
-  if (!files || files.length === 0) { 
-    alert("Selecione ao menos uma imagem."); 
-    return;
-  }
+  if (!files || files.length === 0) { alert("Selecione ao menos uma imagem."); return; }
+
+  // Validação obrigatória dos novos campos
+  if (!setorEl.value) { alert("Selecione o Setor."); return; }
+  if (!profissionalEl.value) { alert("Selecione o tipo de Profissional."); return; }
+  const nome = (nomeCompletoEl.value || "").trim();
+  if (!nome) { alert("Informe o nome completo."); return; }
 
   sendBtn.disabled = true; 
   statusEl.textContent = `Enviando ${files.length} arquivo(s) e processando... Aguarde.`;
 
-  const form = new FormData(); 
+  const form = new FormData();
+  // Novos campos no corpo do POST
+  form.append("setor", setorEl.value);
+  form.append("profissional", profissionalEl.value);
+  form.append("nome_completo", nome);
+
   for (const f of files) form.append("files", f, f.name); 
 
   try {
@@ -239,17 +216,15 @@ sendBtn.onclick = async () => {
     if (!res.ok) throw new Error(`Falha no processamento: HTTP ${res.status}`); 
     const data = await res.json(); 
 
-    /* ---------- ATUALIZA RESUMO ---------- */
     const resumo = data.resumo;
     if (resumo) {
       resumoBox.style.display = "block"; 
       kTotal.textContent = resumo.total_docs ?? 0;
-      kOk.textContent    = resumo.encontrados_lote ?? 0; 
-      kNew.textContent   = resumo.novos_adicionados ?? 0; 
+      kOk.textContent    = resumo.encontrados_lote ?? 0; 
+      kNew.textContent   = resumo.novos_adicionados ?? 0; 
       kDupIgnore.textContent = resumo.duplicados_ignorar ?? 0; 
-      kTime.textContent  = resumo.tempo_total_s ?? 0;
+      kTime.textContent  = resumo.tempo_total_s ?? 0;
 
-      // Exibe lista de duplicados ignorados
       if (resumo.duplicados_lista && resumo.duplicados_lista.length > 0) {
           duplicatesList.style.display = "block";
           dupListContent.textContent = resumo.duplicados_lista.join(", ");
@@ -258,20 +233,16 @@ sendBtn.onclick = async () => {
           dupListContent.textContent = "Nenhum protocolo duplicado ignorado neste lote.";
       }
       
-      // Mensagem de status detalhada (REQUISITO)
-      statusEl.textContent = `Processamento concluído: ${resumo.processados} imagens processadas — ${resumo.encontrados_lote} protocolos encontrados — ${resumo.novos_adicionados} novos adicionados — ${resumo.duplicados_ignorar} duplicados ignorados. Duplicados: [${resumo.duplicados_lista.join(', ')}]`;
+      statusEl.textContent = `Processamento concluído: ${resumo.processados} imagens processadas — ${resumo.encontrados_lote} protocolos encontrados — ${resumo.novos_adicionados} novos adicionados — ${resumo.duplicados_ignorar} duplicados ignorados. Duplicados: [${(resumo.duplicados_lista||[]).join(', ')}]`;
     }
 
-    /* ---------- PREENCHIMENTO DA TABELA ---------- */
-    tbody.innerHTML = ""; 
+    tbody.innerHTML = "";
     for (const r of data.resultados_lote) { 
       const tr = document.createElement("tr"); 
-      // Classe para duplicados ignorados (destaque visual)
       if (r.duplicado) {
           tr.classList.add('duplicate-row');
           tr.title = "Protocolo Duplicado - Ignorado no Excel";
       }
-      
       tr.innerHTML = `
         <td>${r.indice_processamento ?? ""}</td>
         <td>${r.arquivo || ""}</td>
@@ -283,7 +254,6 @@ sendBtn.onclick = async () => {
     }
     table.style.display = "table"; 
 
-    /* ---------- ATUALIZA LINK DO EXCEL ---------- */
     totals.textContent = "Total de protocolos (no Excel): " + (data.total_protocolos_no_excel ?? 0);
     excelLink.href = API + (data.excel_path || "/download/excel");
 

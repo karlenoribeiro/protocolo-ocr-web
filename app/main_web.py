@@ -1,10 +1,6 @@
-# main_web.py - CÓDIGO CORRIGIDO
+# main_web.py - ATUALIZADO PARA SETOR/PROFISSIONAL/NOME
 
-# ============================================================
-# API PARA EXTRAÇÃO DE PROTOCOLOS (OCR) — com resumo do lote
-# ============================================================
-
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
@@ -12,15 +8,14 @@ from typing import List
 import uvicorn
 import time
 
-# Importa as novas funções/tipos do módulo interno de OCR:
 from .ocr_core import (
     processar_imagem_bytes, 
     consolidar_resultados, 
-    ler_protocolos_existentes, # NOVA FUNÇÃO
+    ler_protocolos_existentes,
     EXCEL_PATH
 )
 
-app = FastAPI(title="Protocolo OCR Web", version="1.1")
+app = FastAPI(title="Protocolo OCR Web", version="1.2")
 
 app.add_middleware(
     CORSMiddleware,
@@ -34,75 +29,74 @@ app.add_middleware(
 def root():
     return "<h1>API Protocolo OCR Rodando</h1><p>Use POST /extract</p>"
 
-# Rota POST "/extract" que processa os arquivos enviados
 @app.post("/extract")
-async def extract(files: List[UploadFile] = File(...)):
+async def extract(
+    files: List[UploadFile] = File(...),
+    setor: str = Form(...),
+    profissional: str = Form(...),
+    nome_completo: str = Form(...)
+):
     t0 = time.time()
-    
-    # 1. Pré-leitura: LÊ PROTOCOLOS EXISTENTES (set para checagem rápida)
+
+    # Normalização simples
+    setor = (setor or "").strip()
+    profissional = (profissional or "").strip()
+    nome_completo = (nome_completo or "").strip()
+
+    # Leitura do histórico (com robustez)
     protocolos_existentes, df_existente = ler_protocolos_existentes()
-    
+
     resultados = []
-    protocolos_do_lote_set = set() # Para checar duplicatas dentro do lote atual (memória)
-    
-    # Contadores
-    encontrados_lote = 0 # Protocolos válidos encontrados neste lote (antes da checagem)
-    novos_adicionados = 0 # Protocolos novos (não duplicados no Excel ou no lote)
-    duplicados_ignorar = [] # Lista de protocolos duplicados a ignorar
-    
-    # Lista dos resultados válidos e não duplicados que serão salvos
+    protocolos_do_lote_set = set()
+
+    encontrados_lote = 0
+    novos_adicionados = 0
+    duplicados_ignorar = []
     resultados_para_salvar = []
 
-    # Loop para processar cada arquivo enviado
     for i, f in enumerate(files, start=1):
         content = await f.read()
         r = processar_imagem_bytes(f.filename, content)
-        
+
+        # Anexa os novos metadados de identificação do usuário/uso
+        r["setor"] = setor
+        r["profissional"] = profissional
+        r["nome_completo"] = nome_completo
+
         protocolo_17 = r.get("protocolo_17_digitos")
-        
-        # 2. Lógica de Checagem de Duplicação
         is_duplicate = False
-        
+
         if protocolo_17:
             encontrados_lote += 1
-            # Checa se é duplicado no histórico (Excel) OU no lote atual (memória)
             if protocolo_17 in protocolos_existentes or protocolo_17 in protocolos_do_lote_set:
                 is_duplicate = True
                 duplicados_ignorar.append(protocolo_17)
             else:
-                # É um protocolo novo. Adiciona ao set do lote para checar futuras duplicações neste mesmo POST
                 protocolos_do_lote_set.add(protocolo_17)
                 novos_adicionados += 1
-                # Adiciona à lista de salvamento (apenas os que não são duplicados)
                 resultados_para_salvar.append(r)
 
         r["indice_processamento"] = i
-        r["ok"] = bool(protocolo_17) # Marca se encontrou o protocolo
-        r["duplicado"] = is_duplicate # Adiciona info de duplicação para o resumo no frontend
+        r["ok"] = bool(protocolo_17)
+        r["duplicado"] = is_duplicate
         resultados.append(r)
 
-    # 3. Consolidação no Excel
-    # Passa APENAS os resultados válidos E NÃO DUPLICADOS e o DataFrame existente
+    # Consolida apenas os não-duplicados
     df_total = consolidar_resultados(resultados_para_salvar, df_existente)
-    
-    # 4. Finaliza Resumo e Resposta
-    # Contabiliza o total de protocolos válidos no Excel (len==17)
+
     total_protocolos_validos_excel = int(df_total['protocolo_17_digitos'].str.len().eq(17).sum())
-    
-    # Remove duplicatas da lista de ignorados para o resumo
     duplicados_unicos_ignorar = sorted(list(set(duplicados_ignorar)))
 
     resumo = {
         "total_docs": len(resultados),
         "processados": len(resultados),
-        "encontrados_lote": encontrados_lote, # Total de protocolos válidos encontrados no lote
-        "novos_adicionados": novos_adicionados, # Total de protocolos NOVOS adicionados (não duplicados)
-        "duplicados_ignorar": len(duplicados_ignorar), # Total de duplicados IGNORADOS (do lote)
-        "duplicados_lista": duplicados_unicos_ignorar, # Lista dos protocolos duplicados ignorados
+        "encontrados_lote": encontrados_lote,
+        "novos_adicionados": novos_adicionados,
+        "duplicados_ignorar": len(duplicados_ignorar),
+        "duplicados_lista": duplicados_unicos_ignorar,
         "tempo_total_s": round(time.time() - t0, 3)
     }
 
-    # Retorna a resposta em JSON contendo o resumo e os resultados detalhados
     return JSONResponse({
         "resumo": resumo,
         "processados": len(resultados),
@@ -111,7 +105,6 @@ async def extract(files: List[UploadFile] = File(...)):
         "resultados_lote": resultados
     })
 
-# Rota GET para download do arquivo Excel consolidado (Mantida)
 @app.get("/download/excel")
 def download_excel():
     if not EXCEL_PATH.exists():

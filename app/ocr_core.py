@@ -1,8 +1,4 @@
-# ocr_core.py - CÓDIGO COMPLETO CORRIGIDO
-# =======================
-# EXTRAÇÃO DE PROTOCOLOS (17 DÍGITOS) DE IMAGENS
-# =======================
-
+# ocr_core.py - ATUALIZADO PARA INCLUIR SETOR/PROFISSIONAL/NOME
 import re
 import cv2
 import numpy as np
@@ -14,15 +10,10 @@ from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Optional, Tuple, List
 from openpyxl import load_workbook
-import os # <-- NOVO IMPORT NECESSÁRIO PARA A CORREÇÃO
+import os
 
-# Define o fuso horário de Belém para padronizar os horários gerados
 LOCAL_TZ = ZoneInfo("America/Belem")
-
-# Extensões de imagem aceitas pelo sistema
 EXTS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".jfif"}
-
-# --- Funções Auxiliares (mantidas inalteradas) ---
 
 def now_belem_str():
     return datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
@@ -146,8 +137,6 @@ def tentar_ocr_em_varias_formas(img_color):
             pass
     return "\n".join([t for t in textos if t])
 
-# --- Lógica de Processamento de Imagem (Mantida) ---
-
 def processar_imagem_bytes(filename: str, content: bytes):
     arr = np.frombuffer(content, dtype=np.uint8)
     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
@@ -185,55 +174,56 @@ def processar_imagem_bytes(filename: str, content: bytes):
         "protocolo_ocr": protocolo_fmt,
         "protocolo_17_digitos": protocolo_17,
         "data_extracao": now_belem_str(),
-        "ok": ok # Indica se o protocolo foi encontrado (ainda não checa duplicidade)
+        "ok": ok
     }
 
-# Caminho padrão para salvar os resultados em Excel
-# Se o seu projeto estiver estruturado como 'Protocolo_OCR_Web/app/ocr_core.py', 
-# o Path(file).parent é 'Protocolo_OCR_Web/app', então o Excel será salvo em 'Protocolo_OCR_Web/app/data'
 EXCEL_PATH = Path(__file__).parent / "data" / "protocolos_extraidos.xlsx"
 EXCEL_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-# --- FUNÇÕES DE LEITURA E ESCRITA (ATUALIZADAS PARA ROBUSTEZ) ---
-
 def ler_protocolos_existentes() -> Tuple[set, pd.DataFrame]:
-    """Lê protocolos válidos existentes no Excel para checagem de duplicidade."""
-    df_existente = pd.DataFrame(columns=["arquivo","protocolo_ocr","protocolo_17_digitos","data_extracao"])
-    
+    df_existente = pd.DataFrame(columns=[
+        "arquivo","protocolo_ocr","protocolo_17_digitos","data_extracao",
+        "setor","profissional","nome_completo"
+    ])
     if EXCEL_PATH.exists():
         try:
-            # Ler o arquivo, garantindo que a coluna de 17 dígitos seja string
             df_existente = pd.read_excel(EXCEL_PATH, dtype={"protocolo_17_digitos": str})
-            # Garantir que protocolos vazios/nulos não sejam contados
-            df_existente["protocolo_17_digitos"] = df_existente["protocolo_17_digitos"].astype(str).str.strip().replace('', np.nan)
+            # Garante colunas novas mesmo em planilhas antigas
+            for col in ["setor","profissional","nome_completo"]:
+                if col not in df_existente.columns:
+                    df_existente[col] = ""
+            df_existente["protocolo_17_digitos"] = (
+                df_existente["protocolo_17_digitos"].astype(str).str.strip().replace('', np.nan)
+            )
         except Exception:
-            # Se a leitura falhar (ex: arquivo corrompido ou aberto), retorna DataFrame vazio
             pass
 
-    # Normaliza e filtra protocolos válidos (17 dígitos) para o set
-    validos = set(df_existente[df_existente['protocolo_17_digitos'].str.len() == 17]['protocolo_17_digitos'].dropna().tolist())
-    
-    # Retorna o set de protocolos válidos e o DataFrame original lido
+    validos = set(
+        df_existente[df_existente['protocolo_17_digitos'].str.len() == 17]
+        ['protocolo_17_digitos'].dropna().tolist()
+    )
     return validos, df_existente
 
 def salvar_excel_texto(df_total: pd.DataFrame):
-    """
-    Salva DataFrame em arquivo Excel com escrita atômica (temporário + substituir).
-    Corrigido o WinError 183 usando os.replace e tratamento de exceção.
-    """
     if "protocolo_17_digitos" in df_total.columns:
         df_total["protocolo_17_digitos"] = df_total["protocolo_17_digitos"].fillna("").astype(str)
     else:
         df_total["protocolo_17_digitos"] = ""
-    
+
+    # Garante a presença das novas colunas (ordem amigável)
+    colunas_final = [
+        "arquivo","protocolo_ocr","protocolo_17_digitos","data_extracao",
+        "setor","profissional","nome_completo"
+    ]
+    for col in colunas_final:
+        if col not in df_total.columns:
+            df_total[col] = ""
+    df_total = df_total[colunas_final]
+
     temp_path = EXCEL_PATH.with_suffix(".tmp")
-    
     try:
-        # 1. Grava no arquivo temporário
         with pd.ExcelWriter(temp_path, engine="openpyxl", mode="w") as writer:
             df_total.to_excel(writer, index=False, sheet_name="Sheet1")
-            
-            # Formatação de coluna como texto (openpyxl só está disponível dentro do ExcelWriter)
             try:
                 ws = writer.book.active
                 col_idx = None
@@ -246,50 +236,40 @@ def salvar_excel_texto(df_total: pd.DataFrame):
                         for cell in row:
                             cell.number_format = "@"
             except Exception:
-                pass # Ignora erro de formatação
-                
-        # 2. SUBSTITUI: Tenta mover o arquivo temporário para o destino final.
-        # os.replace é mais robusto que Path.rename no Windows.
+                pass
         os.replace(temp_path, EXCEL_PATH)
-        
     except Exception as e:
-        # 3. TRATAMENTO DE ERRO: Garante que o arquivo temporário seja removido.
         if temp_path.exists():
-            try:
-                temp_path.unlink() # Exclui o arquivo temporário
-            except Exception:
-                # Se não conseguir excluir o temporário, não há mais o que fazer
-                pass 
-        
-        # Re-lança o erro para o FastAPI/Uvicorn
-        raise e 
+            try: temp_path.unlink()
+            except Exception: pass
+        raise e
 
 def consolidar_resultados(novos: List[dict], df_existente: pd.DataFrame) -> pd.DataFrame:
-    """Consolida novos protocolos válidos com o histórico, remove duplicatas e salva."""
-    # Cria DataFrame com os novos resultados
     df_novos = pd.DataFrame(novos)
-    
-    # Garante colunas mínimas para evitar erro de concatenação
-    colunas_padrao = ["arquivo","protocolo_ocr","protocolo_17_digitos","data_extracao"]
+
+    # Colunas padrão + novas
+    colunas_padrao = [
+        "arquivo","protocolo_ocr","protocolo_17_digitos","data_extracao",
+        "setor","profissional","nome_completo"
+    ]
     for col in colunas_padrao:
         if col not in df_novos.columns:
             df_novos[col] = None
-    
-    # Junta dados novos e antigos
-    df_existente_limpo = df_existente.drop(columns=[col for col in df_existente.columns if col not in colunas_padrao], errors='ignore')
-    df_total = pd.concat([df_existente_limpo, df_novos.drop(columns=['ok', 'duplicado', 'indice_processamento'], errors='ignore')], ignore_index=True)
 
-    # 1. Garante que a coluna de protocolo seja string
+    df_existente_limpo = df_existente.drop(
+        columns=[c for c in df_existente.columns if c not in colunas_padrao],
+        errors='ignore'
+    )
+    df_total = pd.concat(
+        [df_existente_limpo, df_novos.drop(columns=['ok','duplicado','indice_processamento'], errors='ignore')],
+        ignore_index=True
+    )
+
     if "protocolo_17_digitos" in df_total.columns:
         df_total["protocolo_17_digitos"] = df_total["protocolo_17_digitos"].astype(str).str.strip().replace('', np.nan)
-    
-    # 2. Remove linhas onde o protocolo não é válido (len != 17)
-    df_total = df_total[df_total['protocolo_17_digitos'].str.len() == 17].copy() 
-    
-    # 3. CRUCIAL: Remove duplicatas no arquivo final APENAS pelo protocolo de 17 dígitos
+
+    df_total = df_total[df_total['protocolo_17_digitos'].str.len() == 17].copy()
     df_total = df_total.drop_duplicates(subset=["protocolo_17_digitos"], keep="first")
 
-    # Salva resultados consolidados em Excel usando a função atômica
     salvar_excel_texto(df_total)
-    
     return df_total
